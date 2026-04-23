@@ -2,11 +2,14 @@
   "name": "folder-listener",
   "private": true,
   "version": "1.0.0",
+  "description": "Automated folder monitoring and image compression utility.",
+  "author": "Zheng Xiaohu",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "start": "electron .",
-    "build": "electron-builder --publish always",
+    "build": "tsc && vite build && electron-builder",
+    "build:publish": "tsc && vite build && electron-builder --publish always",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },

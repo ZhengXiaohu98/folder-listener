@@ -1,5 +1,3 @@
-import React from 'react';
-
 import { AppearanceSettings } from './AppearanceSettings';
 import { CompressionSettings } from './CompressionSettings';
 

@@ -12,7 +12,7 @@ export interface LogEntry {
   level: LogLevel;
   category: string; // 'file-processing' | 'hook' | 'app' | 'watcher'
   message: string;
-  detail?: string;  // stack trace or extra info
+  detail?: string | null;  // stack trace or extra info
   createdAt: string;
 }
 

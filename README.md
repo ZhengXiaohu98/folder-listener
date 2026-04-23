@@ -8,6 +8,10 @@ Magic Folder is a professional-grade desktop utility designed to streamline your
 
 ## Core Features
 
+### v1.0.1
+
+1. fix: unpack sharp to prevent native module crash
+
 ### v1.0.0
 
 1. Automated Folder Monitoring

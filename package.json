@@ -1,7 +1,7 @@
 {
   "name": "folder-listener",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Automated folder monitoring and image compression utility.",
   "author": "Zheng Xiaohu",
   "type": "module",

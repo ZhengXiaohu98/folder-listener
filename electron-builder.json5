@@ -20,8 +20,9 @@
     "target": [
       "dmg"
     ],
-    "identity": null,
+    "identity": "-",
     "gatekeeperAssess": false,
+    "hardenedRuntime": false,
     "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
   },
   "win": {

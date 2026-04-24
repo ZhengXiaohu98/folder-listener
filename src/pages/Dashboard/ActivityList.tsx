@@ -26,28 +26,33 @@ export function ActivityList({ onTabChange }: { onTabChange: (tab: string) => vo
       <div className="px-6 py-4 flex items-center justify-between border-b border-bc-100">
         <h3 className="text-lg font-semibold text-primary">Recent Activity</h3>
         <button
-          onClick={() => onTabChange('History')}
+          onClick={() => onTabChange('Logs')}
           className="text-sm font-semibold text-accent hover:opacity-80 transition-opacity cursor-pointer"
         >
-          View All
+          View Logs →
         </button>
       </div>
 
       <div className="divide-y divide-bc-100">
         {activities.length === 0 && (
           <div className="p-6 text-center text-secondary text-sm">
-            No recent activity. Start the system to process files.
+            No recent activity. Start a pipeline to process files.
           </div>
         )}
         {activities.slice(0, 5).map((item) => {
           const savedSize = item.originalSize - item.compressedSize;
           return (
             <div key={item.id} className="p-4 px-6 flex items-center justify-between hover:bg-back-300 transition-colors group cursor-default gap-2">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 min-w-0">
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-back-300 border border-bc-100">
                   <ImageIcon className="w-5 h-5 text-success" />
                 </div>
-                <h4 className="text-sm font-medium text-primary group-hover:text-accent transition-colors line-clamp-1">{item.filename}</h4>
+                <div className="min-w-0">
+                  <h4 className="text-sm font-medium text-primary group-hover:text-accent transition-colors line-clamp-1">{item.filename}</h4>
+                  {item.pipelineName && (
+                    <span className="text-[10px] text-secondary/70 font-medium">{item.pipelineName}</span>
+                  )}
+                </div>
               </div>
 
               <div className="text-right min-w-20 shrink-0">

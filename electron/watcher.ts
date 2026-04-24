@@ -25,19 +25,45 @@ db.serialize(() => {
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  // Migration: add pipelineId column if not exists
+  db.run(`ALTER TABLE activities ADD COLUMN pipelineId TEXT`, () => {});
+  db.run(`ALTER TABLE activities ADD COLUMN pipelineName TEXT`, () => {});
 });
 
 // ---------------------------------------------------------------------------
-// State
+// Pipeline type
 // ---------------------------------------------------------------------------
-let watcher: FSWatcher | null = null;
-let mainWindow: any = null;
-let activeConfig: any = null;
-let activeSourceFolder: string | null = null;
-let watcherTransition: Promise<void> = Promise.resolve();
+export interface Pipeline {
+  id: string;
+  name: string;
+  enabled: boolean;
+  sourceFolder: string;
+  destFolder: string;
+  hookEnabled?: boolean;
+  hookCode?: string;
+  // Per-pipeline compression (optional for backward compat)
+  compressionLevel?: string;
+  customOptions?: { quality: number; maxWidth: number };
+  supportedFormats?: { jpeg: boolean; png: boolean; webp: boolean; gif: boolean; svg: boolean; avif: boolean };
+  advancedOptions?: {
+    autoDelete: boolean;
+    enableCustomSuffix: boolean;
+    customSuffix: string;
+    enableCustomFileName: boolean;
+    customFileName: string;
+  };
+  outputFormat?: string;
+}
 
 // ---------------------------------------------------------------------------
-// Concurrency Queue
+// State — one FSWatcher per pipeline id
+// ---------------------------------------------------------------------------
+let mainWindow: any = null;
+const watchers: Map<string, FSWatcher> = new Map();
+const activePipelines: Map<string, Pipeline> = new Map();
+
+// ---------------------------------------------------------------------------
+// Concurrency Queue (shared across all pipelines)
 // ---------------------------------------------------------------------------
 const CONCURRENCY_LIMIT = 5;
 let activeJobs = 0;
@@ -62,8 +88,6 @@ function drainQueue() {
 // ---------------------------------------------------------------------------
 // Format helpers
 // ---------------------------------------------------------------------------
-
-/** Map supportedFormats config keys → file extensions */
 const FORMAT_EXT_MAP: Record<string, string[]> = {
   jpeg: ['.jpg', '.jpeg'],
   png:  ['.png'],
@@ -73,13 +97,8 @@ const FORMAT_EXT_MAP: Record<string, string[]> = {
   avif: ['.avif'],
 };
 
-/**
- * Formats that sharp can convert TO (output targets).
- * SVG and GIF are excluded because sharp cannot produce them.
- */
 const CONVERTIBLE_OUTPUT_FORMATS = new Set(['jpeg', 'png', 'webp', 'avif']);
 
-/** Build the set of extensions the watcher should react to based on config. */
 function buildAllowedExtensions(supportedFormats: Record<string, boolean>): Set<string> {
   const exts = new Set<string>();
   for (const [key, enabled] of Object.entries(supportedFormats)) {
@@ -92,12 +111,10 @@ function buildAllowedExtensions(supportedFormats: Record<string, boolean>): Set<
   return exts;
 }
 
-/** Generate a random 6-digit numeric string. */
 function randomSixDigits(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-/** Resolve the destination filename according to advanced options. */
 function resolveDestFilename(
   sourceFilename: string,
   sourceExt: string,
@@ -107,42 +124,34 @@ function resolveDestFilename(
   const { enableCustomFileName, customFileName, enableCustomSuffix, customSuffix } = advancedOptions ?? {};
   const nameWithoutExt = path.basename(sourceFilename, sourceExt);
 
-  // 1. Custom Filename takes highest priority
   if (enableCustomFileName && customFileName) {
     return `${customFileName}-${randomSixDigits()}${destExt}`;
   }
 
-  // 2. Custom Suffix
   const suffix = enableCustomSuffix ? (customSuffix ?? '-min') : '';
   return `${nameWithoutExt}${suffix}${destExt}`;
 }
 
-/** Determine the output extension and sharp pipeline method for a given config. */
 function resolveOutputFormat(
   sourceExt: string,
   outputFormatConfig: string
 ): { destExt: string; sharpFormat: string | null } {
-  // Normalise source ext → format key
   const srcFmt = sourceExt === '.jpg' ? 'jpeg' : sourceExt.replace('.', '');
 
   if (!outputFormatConfig || outputFormatConfig === 'Original') {
-    // Keep original, but GIF/SVG can't be re-encoded by sharp — pass through
     if (['gif', 'svg'].includes(srcFmt)) {
-      return { destExt: sourceExt, sharpFormat: null }; // copy only
+      return { destExt: sourceExt, sharpFormat: null };
     }
     return { destExt: sourceExt, sharpFormat: srcFmt };
   }
 
-  const target = outputFormatConfig.toLowerCase(); // 'jpeg' | 'png' | 'webp' | 'avif'
+  const target = outputFormatConfig.toLowerCase();
 
   if (!CONVERTIBLE_OUTPUT_FORMATS.has(target)) {
-    // Unsupported target — fall back to original
     console.warn(`[watcher] Cannot convert to "${outputFormatConfig}", keeping original format.`);
     return { destExt: sourceExt, sharpFormat: srcFmt === 'gif' || srcFmt === 'svg' ? null : srcFmt };
   }
 
-  // Source is GIF or SVG — sharp can READ them but cannot write them as-is
-  // We can still convert to the target format
   const extMap: Record<string, string> = { jpeg: '.jpg', png: '.png', webp: '.webp', avif: '.avif' };
   return { destExt: extMap[target], sharpFormat: target };
 }
@@ -150,16 +159,15 @@ function resolveOutputFormat(
 // ---------------------------------------------------------------------------
 // Core processing
 // ---------------------------------------------------------------------------
-async function processFile(filePath: string, config: any): Promise<void> {
-  const {
-    sourceFolder,
-    destFolder,
-    compressionLevel = 'Medium',
-    customOptions = { quality: 80, maxWidth: 1920 },
-    supportedFormats = {},
-    advancedOptions = {},
-    outputFormat = 'Original',
-  } = config;
+async function processFile(filePath: string, config: any, pipeline: Pipeline): Promise<void> {
+  // Per-pipeline compression takes priority; fall back to global config for legacy setups
+  const compressionLevel  = pipeline.compressionLevel  ?? config.compressionLevel  ?? 'Medium';
+  const customOptions     = pipeline.customOptions     ?? config.customOptions     ?? { quality: 80, maxWidth: 1920 };
+  const supportedFormats  = pipeline.supportedFormats  ?? config.supportedFormats  ?? {};
+  const advancedOptions   = pipeline.advancedOptions   ?? config.advancedOptions   ?? {};
+  const outputFormat      = pipeline.outputFormat      ?? config.outputFormat      ?? 'Original';
+
+  const { sourceFolder, destFolder } = pipeline;
 
   if (sourceFolder && !isPathInsideFolder(filePath, sourceFolder)) return;
   if (!destFolder) return;
@@ -167,7 +175,7 @@ async function processFile(filePath: string, config: any): Promise<void> {
   const sourceExt = path.extname(filePath).toLowerCase();
   const allowedExts = buildAllowedExtensions(supportedFormats);
 
-  if (!allowedExts.has(sourceExt)) return; // not a watched format
+  if (!allowedExts.has(sourceExt)) return;
 
   const { destExt, sharpFormat } = resolveOutputFormat(sourceExt, outputFormat);
   const sourceFilename = path.basename(filePath);
@@ -178,62 +186,46 @@ async function processFile(filePath: string, config: any): Promise<void> {
   const stat = await fs.stat(filePath);
   const originalSize = stat.size;
 
-  // Quality mapping for compression levels
   const qualityMap: Record<string, number> = { Low: 90, Medium: 80, High: 50, Custom: customOptions.quality ?? 80 };
   const quality = qualityMap[compressionLevel] ?? 80;
   const maxWidth = compressionLevel === 'Custom' ? (customOptions.maxWidth ?? 1920) : undefined;
 
   if (sharpFormat === null) {
-    // Can't process with sharp (e.g. SVG → keep original, GIF without target conversion)
     await fs.copyFile(filePath, destPath);
   } else {
-    let pipeline = sharp(filePath);
+    let pipeline_sharp = sharp(filePath);
 
-    // Resize if maxWidth is set
     if (maxWidth) {
-      pipeline = pipeline.resize({ width: maxWidth, withoutEnlargement: true });
+      pipeline_sharp = pipeline_sharp.resize({ width: maxWidth, withoutEnlargement: true });
     }
 
-    // Apply format conversion + compression
     switch (sharpFormat) {
-      case 'jpeg':
-        pipeline = pipeline.jpeg({ quality });
-        break;
-      case 'png':
-        pipeline = pipeline.png({ quality });
-        break;
-      case 'webp':
-        pipeline = pipeline.webp({ quality });
-        break;
-      case 'avif':
-        pipeline = pipeline.avif({ quality });
-        break;
-      default:
-        pipeline = pipeline.jpeg({ quality });
+      case 'jpeg': pipeline_sharp = pipeline_sharp.jpeg({ quality }); break;
+      case 'png':  pipeline_sharp = pipeline_sharp.png({ quality }); break;
+      case 'webp': pipeline_sharp = pipeline_sharp.webp({ quality }); break;
+      case 'avif': pipeline_sharp = pipeline_sharp.avif({ quality }); break;
+      default:     pipeline_sharp = pipeline_sharp.jpeg({ quality });
     }
 
-    await pipeline.toFile(destPath);
+    await pipeline_sharp.toFile(destPath);
   }
 
   const newStat = await fs.stat(destPath);
   const compressedSize = newStat.size;
 
-  // Auto-delete original
   if (advancedOptions.autoDelete) {
     try {
-      // Use shell.trashItem for safe deletion (sends to Trash, not permanent delete)
       await shell.trashItem(filePath);
-    } catch (trashErr) {
-      // Fallback to unlink if trashItem fails
+    } catch {
       await fs.unlink(filePath);
     }
   }
 
-  // Persist to DB
+  // Persist to DB with pipeline info
   await new Promise<void>((resolve, reject) => {
     db.run(
-      `INSERT INTO activities (filename, originalSize, compressedSize) VALUES (?, ?, ?)`,
-      [destFilename, originalSize, compressedSize],
+      `INSERT INTO activities (filename, originalSize, compressedSize, pipelineId, pipelineName) VALUES (?, ?, ?, ?, ?)`,
+      [destFilename, originalSize, compressedSize, pipeline.id, pipeline.name],
       function (err) {
         if (err) return reject(err);
         if (mainWindow) {
@@ -244,11 +236,11 @@ async function processFile(filePath: string, config: any): Promise<void> {
     );
   });
 
-  // Execute Custom Hook
-  if (config.hookEnabled && config.hookCode) {
+  // Execute Custom Hook (per-pipeline)
+  if (pipeline.hookEnabled && pipeline.hookCode) {
     try {
       const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-      const hookFn = new AsyncFunction('require', 'file', 'config', config.hookCode);
+      const hookFn = new AsyncFunction('require', 'file', 'config', pipeline.hookCode);
       const fileInfo = {
         name: destFilename,
         path: destPath,
@@ -256,20 +248,18 @@ async function processFile(filePath: string, config: any): Promise<void> {
         originalSize,
         originalPath: filePath
       };
-      await hookFn(require, fileInfo, config);
-      logger.success('hook', `Hook executed for "${destFilename}"`);
+      await hookFn(require, fileInfo, { ...config, ...pipeline });
+      logger.success('hook', `[${pipeline.name}] Hook executed for "${destFilename}"`);
     } catch (hookErr: any) {
-      logger.error('hook', `Hook failed for "${destFilename}"`, hookErr?.stack ?? String(hookErr));
-      // Do NOT re-throw — hook errors must not interrupt the app
+      logger.error('hook', `[${pipeline.name}] Hook failed for "${destFilename}"`, hookErr?.stack ?? String(hookErr));
     }
   }
 
-  // Log file processing success
   const savedKb = ((originalSize - compressedSize) / 1024).toFixed(1);
   const ratio = originalSize > 0 ? ((1 - compressedSize / originalSize) * 100).toFixed(1) : '0';
   logger.success(
     'file-processing',
-    `Processed "${destFilename}" — saved ${savedKb} KB (${ratio}%)`,
+    `[${pipeline.name}] Processed "${destFilename}" — saved ${savedKb} KB (${ratio}%)`,
     `Original: ${(originalSize / 1024).toFixed(1)} KB → Output: ${(compressedSize / 1024).toFixed(1)} KB`
   );
 }
@@ -281,86 +271,124 @@ export function setMainWindow(win: any) {
   mainWindow = win;
 }
 
-export async function startWatcher(config: any) {
-  if (watcher) return;
-  const { sourceFolder, destFolder } = config;
-
-  if (!sourceFolder || !destFolder) throw new Error('Source or Destination folder not set');
+/** Start a single pipeline watcher. No-op if already running. */
+export async function startPipelineWatcher(pipeline: Pipeline, config: any): Promise<void> {
+  if (watchers.has(pipeline.id)) return;
+  const { sourceFolder, destFolder } = pipeline;
+  if (!sourceFolder || !destFolder) throw new Error(`Pipeline "${pipeline.name}": source or destination folder not set`);
 
   await fs.mkdir(destFolder, { recursive: true }).catch(() => {});
+  activePipelines.set(pipeline.id, pipeline);
 
-  activeConfig = config;
-  activeSourceFolder = path.resolve(sourceFolder);
-
-  watcher = watch(sourceFolder, {
-    ignored: /(^|[\/\\])\../,  // ignore hidden files
+  const watcher = watch(sourceFolder, {
+    ignored: /(^|[\/\\])\../,
     persistent: true,
     ignoreInitial: true,
-    // Wait for the file to finish writing before emitting the event.
-    // Polls every 200ms; triggers once file size has been stable for 500ms.
-    awaitWriteFinish: {
-      stabilityThreshold: 500,
-      pollInterval: 200,
-    },
+    awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 200 },
   });
 
   watcher.on('add', (filePath: string) => {
     enqueue(async () => {
       try {
         const latestConfig = await getLatestConfig();
-        await processFile(filePath, latestConfig ?? activeConfig ?? config);
+        const latestPipelines = latestConfig?.pipelines as Pipeline[] | undefined;
+        const latestPipeline = latestPipelines?.find(p => p.id === pipeline.id) ?? pipeline;
+        await processFile(filePath, latestConfig ?? config, latestPipeline);
       } catch (err: any) {
         const name = path.basename(filePath);
-        logger.error(
-          'file-processing',
-          `Failed to process "${name}"`,
-          err?.stack ?? String(err)
-        );
+        logger.error('file-processing', `[${pipeline.name}] Failed to process "${name}"`, err?.stack ?? String(err));
         console.error('[watcher] Error processing file:', filePath, err);
       }
     });
   });
+
+  watchers.set(pipeline.id, watcher);
 }
 
-export async function stopWatcher() {
+/** Stop a single pipeline watcher. */
+export async function stopPipelineWatcher(pipelineId: string): Promise<void> {
+  const watcher = watchers.get(pipelineId);
   if (watcher) {
     await watcher.close();
-    watcher = null;
+    watchers.delete(pipelineId);
   }
-  activeConfig = null;
-  activeSourceFolder = null;
+  activePipelines.delete(pipelineId);
 }
 
-export function getWatcherStatus() {
-  return watcher !== null;
+/** Start all enabled pipelines. (Legacy entry-point) */
+export async function startWatcher(config: any): Promise<void> {
+  const pipelines: Pipeline[] = config.pipelines ?? [];
+  for (const pipeline of pipelines) {
+    if (pipeline.enabled && !watchers.has(pipeline.id)) {
+      await startPipelineWatcher(pipeline, config);
+    }
+  }
 }
 
-export async function applyWatcherConfig(config: any) {
-  watcherTransition = watcherTransition.then(async () => {
-    const isRunning = watcher !== null;
-    activeConfig = config;
+/** Stop ALL pipeline watchers. */
+export async function stopWatcher(): Promise<void> {
+  for (const [id] of watchers) {
+    await stopPipelineWatcher(id);
+  }
+}
 
-    if (config?.destFolder) {
-      await fs.mkdir(config.destFolder, { recursive: true }).catch(() => {});
+/** Returns a map of { pipelineId -> isRunning } */
+export function getWatcherStatus(): Record<string, boolean> {
+  const status: Record<string, boolean> = {};
+  for (const [id] of activePipelines) {
+    status[id] = watchers.has(id);
+  }
+  // Also report pipelines that have watchers but may not be in activePipelines map
+  for (const [id] of watchers) {
+    status[id] = true;
+  }
+  return status;
+}
+
+/** Returns true if at least one watcher is running (backward compat). */
+export function isAnyWatcherRunning(): boolean {
+  return watchers.size > 0;
+}
+
+/** Apply updated config — reconcile running watchers with enabled pipelines. */
+export async function applyWatcherConfig(config: any): Promise<void> {
+  const pipelines: Pipeline[] = config.pipelines ?? [];
+
+  // Stop watchers for pipelines that are now disabled or removed
+  for (const [id] of watchers) {
+    const pipeline = pipelines.find(p => p.id === id);
+    if (!pipeline || !pipeline.enabled) {
+      await stopPipelineWatcher(id);
+    }
+  }
+
+  // Start / restart watchers for enabled pipelines
+  for (const pipeline of pipelines) {
+    if (!pipeline.enabled) continue;
+
+    const existingWatcher = watchers.get(pipeline.id);
+    const existingPipeline = activePipelines.get(pipeline.id);
+
+    // If source folder changed, restart
+    if (existingWatcher && existingPipeline && existingPipeline.sourceFolder !== pipeline.sourceFolder) {
+      await stopPipelineWatcher(pipeline.id);
     }
 
-    if (!isRunning) return;
-
-    const nextSourceFolder = config?.sourceFolder ? path.resolve(config.sourceFolder) : null;
-    if (!nextSourceFolder || !config?.destFolder) {
-      await stopWatcher();
-      return;
+    if (!watchers.has(pipeline.id)) {
+      try {
+        await startPipelineWatcher(pipeline, config);
+      } catch (err: any) {
+        logger.error('watcher', `Failed to start pipeline "${pipeline.name}"`, err?.stack ?? String(err));
+      }
+    } else {
+      // Update in-memory pipeline config (dest folder, hook, etc.)
+      activePipelines.set(pipeline.id, pipeline);
     }
 
-    if (activeSourceFolder !== nextSourceFolder) {
-      await stopWatcher();
-      await startWatcher(config);
+    if (pipeline.destFolder) {
+      await fs.mkdir(pipeline.destFolder, { recursive: true }).catch(() => {});
     }
-  }).catch((err) => {
-    logger.error('watcher', 'Failed to apply updated configuration', err?.stack ?? String(err));
-  });
-
-  return watcherTransition;
+  }
 }
 
 export function getActivities() {
@@ -421,9 +449,8 @@ export function getActivitiesPaged({
   });
 }
 
-
 // ---------------------------------------------------------------------------
-// Helper: read latest config from disk so queue jobs use up-to-date settings
+// Helper: read latest config from disk
 // ---------------------------------------------------------------------------
 import { app as electronApp } from 'electron';
 

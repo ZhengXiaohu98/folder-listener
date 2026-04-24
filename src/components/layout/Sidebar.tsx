@@ -1,11 +1,10 @@
-import { LayoutDashboard, FolderOpen, History, Settings, Info, PanelRight, Webhook, ScrollText, X, ExternalLink } from 'lucide-react';
+import { LayoutDashboard, Settings, Info, PanelRight, ScrollText, X, ExternalLink } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '../../lib/utils';
-import { Logo } from './Logo';
 import packageJson from '../../../package.json';
 
-export type TabType = 'Dashboard' | 'Folders' | 'History' | 'Settings' | 'Hook' | 'Logs';
+export type TabType = 'Dashboard' | 'Settings' | 'Logs';
 
 interface SidebarProps {
   activeTab: TabType;
@@ -13,29 +12,20 @@ interface SidebarProps {
 }
 
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
-
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
-  const navItems: { icon: LucideIcon, label: TabType }[] = [
+
+  const navItems: { icon: LucideIcon; label: TabType }[] = [
     { icon: LayoutDashboard, label: 'Dashboard' },
-    { icon: FolderOpen, label: 'Folders' },
-    { icon: History, label: 'History' },
-    { icon: Webhook, label: 'Hook' },
     { icon: ScrollText, label: 'Logs' },
     { icon: Settings, label: 'Settings' },
   ];
 
   useEffect(() => {
-    if (!isAboutOpen) {
-      return;
-    }
-
+    if (!isAboutOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsAboutOpen(false);
-      }
+      if (event.key === 'Escape') setIsAboutOpen(false);
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isAboutOpen]);
@@ -49,9 +39,9 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             <PanelRight className={cn('size-5 transition', isSidebarOpen && 'rotate-180')} />
           </button>
           {/* Brand */}
-          <div className="flex items-center gap-3 mb-10 px-3">
-            <Logo className="w-10 h-10 shrink-0 text-accent rounded-lg" />
-            <h1 className="font-semibold text-primary leading-tight transition-colors">Folder Listener</h1>
+          <div className="flex items-center gap-1 mb-10 px-3">
+            <img src="/logo.png" alt="logo" className="w-10 h-10 shrink-0" />
+            <h1 className="font-semibold text-primary leading-tight transition-colors text-lg italic font-serif">Folder Listener</h1>
           </div>
 
           {/* Nav Menu */}

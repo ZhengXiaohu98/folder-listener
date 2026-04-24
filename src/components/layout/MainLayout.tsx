@@ -12,7 +12,7 @@ export function MainLayout({ children, activeTab, onTabChange }: MainLayoutProps
     <div className="relative flex w-screen h-screen overflow-hidden bg-back-100 text-primary font-sans transition-colors">
       <Sidebar activeTab={activeTab} onTabChange={onTabChange} />
       <main className="flex-1 h-full overflow-y-auto relative">
-        <div className="p-10">
+        <div className="p-8 md:p-10">
           {children}
         </div>
       </main>

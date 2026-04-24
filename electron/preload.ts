@@ -18,9 +18,6 @@ contextBridge.exposeInMainWorld('ipcRenderer', {
     const [channel, ...omit] = args
     return ipcRenderer.invoke(channel, ...omit)
   },
-
-  // You can expose other APTs you need here.
-  // ...
 })
 
 contextBridge.exposeInMainWorld('darkMode', {
@@ -33,9 +30,15 @@ contextBridge.exposeInMainWorld('darkMode', {
 })
 
 contextBridge.exposeInMainWorld('watcherAPI', {
+  // Multi-pipeline API
+  startPipeline: (pipelineId: string) => ipcRenderer.invoke('watcher:start-pipeline', pipelineId),
+  stopPipeline: (pipelineId: string) => ipcRenderer.invoke('watcher:stop-pipeline', pipelineId),
+  // Status: returns Record<pipelineId, boolean>
+  status: () => ipcRenderer.invoke('watcher:status'),
+  // Legacy: start/stop all
   start: () => ipcRenderer.invoke('watcher:start'),
   stop: () => ipcRenderer.invoke('watcher:stop'),
-  status: () => ipcRenderer.invoke('watcher:status'),
+  // DB
   getActivities: () => ipcRenderer.invoke('db:activities'),
   getActivitiesPaged: (opts: any) => ipcRenderer.invoke('db:activities-paged', opts),
   getStats: () => ipcRenderer.invoke('db:stats'),

@@ -1,24 +1,19 @@
-import { app, BrowserWindow, ipcMain, nativeTheme, dialog, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeTheme, dialog, shell, Tray, Menu, nativeImage } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs/promises'
-import { startWatcher, stopWatcher, getWatcherStatus, getActivities, getActivitiesPaged, getStats, setMainWindow, applyWatcherConfig } from './watcher.js'
+import {
+  startWatcher, stopWatcher, getWatcherStatus,
+  startPipelineWatcher, stopPipelineWatcher,
+  getActivities, getActivitiesPaged, getStats, setMainWindow, applyWatcherConfig,
+  type Pipeline,
+} from './watcher.js'
 import { setLoggerWindow, getLogs, clearLogs, logger } from './logger.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-// The built directory structure
-//
-// ├─┬─┬ dist
-// │ │ └── index.html
-// │ │
-// │ ├─┬ dist-electron
-// │ │ ├── main.js
-// │ │ └── preload.mjs
-// │
 process.env.APP_ROOT = path.join(__dirname, '..')
 
-// 🚧 Use ['ENV_NAME'] avoid vite:define plugin - Vite@2.x
 export const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
 export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
@@ -26,30 +21,103 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
 let win: BrowserWindow | null
+let tray: Tray | null = null
+let isQuitting = false
 
-function createWindow() {
-  const appIcon = path.join(process.env.VITE_PUBLIC, 'logo.png')
+function getAppIconPath() {
+  if (process.platform === 'darwin') {
+    return path.join(process.env.VITE_PUBLIC, 'logo-dock.png')
+  }
+  return path.join(process.env.VITE_PUBLIC, 'logo.png')
+}
+
+function setDockIcon() {
+  if (process.platform !== 'darwin') return
+  app.dock?.setIcon(getAppIconPath())
+}
+
+function createTray() {
+  const iconPath = getAppIconPath()
+  let trayIcon = nativeImage.createFromPath(iconPath)
 
   if (process.platform === 'darwin') {
-    app.dock?.setIcon(appIcon)
+    trayIcon = trayIcon.resize({ width: 18, height: 18 })
+  } else {
+    trayIcon = trayIcon.resize({ width: 16, height: 16 })
   }
+
+  tray = new Tray(trayIcon)
+  tray.setToolTip('Folder Listener')
+
+  const updateContextMenu = () => {
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: '显示 Folder Listener',
+        click: () => showWindow(),
+      },
+      { type: 'separator' },
+      {
+        label: '退出',
+        click: () => {
+          isQuitting = true
+          app.quit()
+        },
+      },
+    ])
+    tray?.setContextMenu(contextMenu)
+  }
+
+  updateContextMenu()
+
+  tray.on('click', () => {
+    showWindow()
+  })
+}
+
+async function showWindow() {
+  if (!win) return
+  if (process.platform === 'darwin') {
+    await app.dock?.show()
+    setDockIcon()
+  }
+  win.show()
+  win.focus()
+}
+
+function hideWindow() {
+  if (!win) return
+  win.hide()
+  if (process.platform === 'darwin') {
+    app.dock?.hide()
+  }
+}
+
+function createWindow() {
+  const appIcon = getAppIconPath()
+
+  setDockIcon()
 
   win = new BrowserWindow({
     width: 1000,
     height: 750,
-    show: false, // Prevent white screen flash by hiding until ready
+    show: false,
     icon: appIcon,
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
   })
 
-  // Prevent white screen flash
   win.once('ready-to-show', () => {
     win?.show()
   })
 
-  // Test active push message to Renderer-process.
+  win.on('close', (event) => {
+    if (!isQuitting) {
+      event.preventDefault()
+      hideWindow()
+    }
+  })
+
   win.webContents.on('did-finish-load', () => {
     win?.webContents.send('main-process-message', (new Date).toLocaleString())
   })
@@ -57,7 +125,6 @@ function createWindow() {
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)
   } else {
-    // win.loadFile('dist/index.html')
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
   }
 
@@ -65,23 +132,58 @@ function createWindow() {
   setLoggerWindow(win)
 }
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
+  if (isQuitting) {
+    tray?.destroy()
+    tray = null
     win = null
+    if (process.platform !== 'darwin') {
+      app.quit()
+    }
   }
 })
 
+app.on('before-quit', () => {
+  isQuitting = true
+})
+
 app.on('activate', () => {
-  // On OS X it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
-  if (BrowserWindow.getAllWindows().length === 0) {
+  if (win) {
+    showWindow()
+  } else {
     createWindow()
   }
 })
+
+// ---------------------------------------------------------------------------
+// Default pipeline factory
+// ---------------------------------------------------------------------------
+const DEFAULT_COMPRESSION_MAIN = {
+  compressionLevel: 'Medium',
+  customOptions: { quality: 80, maxWidth: 1920 },
+  supportedFormats: { jpeg: true, png: true, webp: true, gif: true, svg: true, avif: true },
+  advancedOptions: {
+    autoDelete: false,
+    enableCustomSuffix: false,
+    customSuffix: '-min',
+    enableCustomFileName: false,
+    customFileName: 'folder-listener',
+  },
+  outputFormat: 'Original',
+}
+
+function createDefaultPipeline(): Pipeline {
+  return {
+    id: `pipeline-${Date.now()}`,
+    name: 'Pipeline 1',
+    enabled: false,
+    sourceFolder: app.getPath('downloads'),
+    destFolder: path.join(app.getPath('documents'), 'MagicFolder', 'Processed'),
+    hookEnabled: false,
+    hookCode: '',
+    ...DEFAULT_COMPRESSION_MAIN,
+  }
+}
 
 app.whenReady().then(() => {
   ipcMain.handle('dark-mode:toggle', () => {
@@ -106,14 +208,43 @@ app.whenReady().then(() => {
   const getConfig = async () => {
     try {
       const data = await fs.readFile(configPath, 'utf-8')
-      return JSON.parse(data)
+      const parsed = JSON.parse(data)
+
+      // Migration: if no pipelines array, create one from legacy single-pipeline config
+      if (!parsed.pipelines) {
+        const migratedPipeline: Pipeline = {
+          id: `pipeline-${Date.now()}`,
+          name: 'Pipeline 1',
+          enabled: false,
+          sourceFolder: parsed.sourceFolder ?? app.getPath('downloads'),
+          destFolder: parsed.destFolder ?? path.join(app.getPath('documents'), 'MagicFolder', 'Processed'),
+          hookEnabled: parsed.hookEnabled ?? false,
+          hookCode: parsed.hookCode ?? '',
+          // Migrate top-level compression settings into the pipeline
+          compressionLevel: parsed.compressionLevel ?? DEFAULT_COMPRESSION_MAIN.compressionLevel,
+          customOptions: parsed.customOptions ?? DEFAULT_COMPRESSION_MAIN.customOptions,
+          supportedFormats: parsed.supportedFormats ?? DEFAULT_COMPRESSION_MAIN.supportedFormats,
+          advancedOptions: parsed.advancedOptions ?? DEFAULT_COMPRESSION_MAIN.advancedOptions,
+          outputFormat: parsed.outputFormat ?? DEFAULT_COMPRESSION_MAIN.outputFormat,
+        }
+        parsed.pipelines = [migratedPipeline]
+        await fs.writeFile(configPath, JSON.stringify(parsed, null, 2))
+      } else {
+        // Hydrate existing pipelines that may be missing compression fields
+        parsed.pipelines = parsed.pipelines.map((p: any) => ({
+          ...DEFAULT_COMPRESSION_MAIN,
+          ...p,
+        }))
+      }
+
+      return parsed
     } catch (err) {
       console.log('Failed to read config, generating defaults', err)
+      const defaultPipeline = createDefaultPipeline()
       const defaultConfig = {
         theme: 'system',
         accent: '青色',
-        sourceFolder: app.getPath('downloads'),
-        destFolder: path.join(app.getPath('documents'), 'MagicFolder', 'Processed'),
+        pipelines: [defaultPipeline],
         compressionLevel: 'Medium',
         customOptions: { quality: 80, maxWidth: 1920 },
         supportedFormats: { jpeg: true, png: true, webp: true, gif: true, svg: true, avif: true },
@@ -176,18 +307,49 @@ app.whenReady().then(() => {
     win?.webContents.send('theme-updated', nativeTheme.shouldUseDarkColors)
   })
 
+  // -------------------------------------------------------------------------
+  // Watcher IPC — multi-pipeline
+  // -------------------------------------------------------------------------
+
+  /** Start ALL enabled pipelines */
   ipcMain.handle('watcher:start', async () => {
     const config = await getConfig()
     await startWatcher(config)
     return getWatcherStatus()
   })
 
+  /** Stop ALL pipeline watchers */
   ipcMain.handle('watcher:stop', async () => {
     await stopWatcher()
     return getWatcherStatus()
   })
 
+  /** Returns Record<pipelineId, boolean> */
   ipcMain.handle('watcher:status', () => {
+    return getWatcherStatus()
+  })
+
+  /** Start a specific pipeline by id */
+  ipcMain.handle('watcher:start-pipeline', async (_, pipelineId: string) => {
+    const config = await getConfig()
+    const pipelines: Pipeline[] = config.pipelines ?? []
+    const pipeline = pipelines.find((p: Pipeline) => p.id === pipelineId)
+    if (!pipeline) throw new Error(`Pipeline not found: ${pipelineId}`)
+    await startPipelineWatcher(pipeline, config)
+    // Persist enabled state
+    const updated = pipelines.map((p: Pipeline) => p.id === pipelineId ? { ...p, enabled: true } : p)
+    await setConfig({ pipelines: updated })
+    return getWatcherStatus()
+  })
+
+  /** Stop a specific pipeline by id */
+  ipcMain.handle('watcher:stop-pipeline', async (_, pipelineId: string) => {
+    await stopPipelineWatcher(pipelineId)
+    // Persist disabled state
+    const config = await getConfig()
+    const pipelines: Pipeline[] = config.pipelines ?? []
+    const updated = pipelines.map((p: Pipeline) => p.id === pipelineId ? { ...p, enabled: false } : p)
+    await setConfig({ pipelines: updated })
     return getWatcherStatus()
   })
 
@@ -212,6 +374,7 @@ app.whenReady().then(() => {
   })
 
   createWindow()
+  createTray()
 })
 
 // ---------------------------------------------------------------------------

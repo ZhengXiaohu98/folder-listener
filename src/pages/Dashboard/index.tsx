@@ -1,31 +1,54 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { ActivityList } from './ActivityList';
-import { StatusCard } from './StatusCard';
 import { StorageCard } from './StorageCard';
-import { FolderOpen, FolderDown } from 'lucide-react';
+import { FolderOpen, FolderDown, Play, Pause, Radio } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
 
-export function Dashboard({ onTabChange }: { onTabChange: (tab: any) => void }) {
-  const [isActive, setIsActive] = useState(false);
-  const [sourceFolder, setSourceFolder] = useState<string>('');
-  const [destFolder, setDestFolder] = useState<string>('');
+interface Pipeline {
+  id: string;
+  name: string;
+  enabled: boolean;
+  sourceFolder: string;
+  destFolder: string;
+}
 
-  useEffect(() => {
-    (window as any).watcherAPI.status().then(setIsActive);
-    (window as any).ipcRenderer.invoke('get-config').then((config: any) => {
-      if (config?.sourceFolder) setSourceFolder(config.sourceFolder);
-      if (config?.destFolder) setDestFolder(config.destFolder);
-    });
+export function Dashboard({ onTabChange }: { onTabChange: (tab: any) => void }) {
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const [statusMap, setStatusMap] = useState<Record<string, boolean>>({});
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const folderName = (p: string) => p ? p.split(/[\\\/]/).pop() || p : '—';
+
+  const loadData = useCallback(async () => {
+    const [config, status] = await Promise.all([
+      (window as any).ipcRenderer.invoke('get-config'),
+      (window as any).watcherAPI.status(),
+    ]);
+    setPipelines(config?.pipelines ?? []);
+    setStatusMap(status ?? {});
   }, []);
 
-  const handleToggle = async () => {
-    if (isActive) {
-      const status = await (window as any).watcherAPI.stop();
-      setIsActive(status);
-    } else {
-      const status = await (window as any).watcherAPI.start();
-      setIsActive(status);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleToggle = async (pipeline: Pipeline) => {
+    const isRunning = statusMap[pipeline.id] ?? false;
+    setTogglingId(pipeline.id);
+    try {
+      let newStatus: Record<string, boolean>;
+      if (isRunning) {
+        newStatus = await (window as any).watcherAPI.stopPipeline(pipeline.id);
+      } else {
+        newStatus = await (window as any).watcherAPI.startPipeline(pipeline.id);
+      }
+      setStatusMap(newStatus ?? {});
+      // Reload pipelines to get latest enabled state
+      const config = await (window as any).ipcRenderer.invoke('get-config');
+      setPipelines(config?.pipelines ?? []);
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -33,10 +56,10 @@ export function Dashboard({ onTabChange }: { onTabChange: (tab: any) => void }) 
     if (folder) (window as any).watcherAPI.openFolder(folder);
   };
 
-  const folderName = (p: string) => p ? p.split(/[\\/]/).pop() || p : '—';
+  const anyRunning = Object.values(statusMap).some(Boolean);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-8">
       {/* Header */}
       <header className="flex items-end justify-between pb-2">
         <div>
@@ -44,68 +67,190 @@ export function Dashboard({ onTabChange }: { onTabChange: (tab: any) => void }) 
           <p className="text-secondary mt-1.5 font-medium transition-colors">Your workspace automation at a glance.</p>
         </div>
 
-        <div className={cn('flex items-center gap-2 px-3 py-1.5 rounded-full border shadow-sm transition-colors', isActive ? 'border-success bg-success/10' : 'border-warning bg-warning/20')}>
-          <div className={cn('w-2 h-2 rounded-full', isActive ? 'bg-success animate-pulse' : 'bg-tertiary')} />
-          <span className={cn('text-xs font-semibold', isActive ? 'text-success' : 'text-tertiary')}>{isActive ? 'Running' : 'Paused'}</span>
+        <div className={cn('flex items-center gap-2 px-3 py-1.5 rounded-full border shadow-sm transition-colors', anyRunning ? 'border-success bg-success/10' : 'border-warning bg-warning/20')}>
+          <div className={cn('w-2 h-2 rounded-full', anyRunning ? 'bg-success animate-pulse' : 'bg-tertiary')} />
+          <span className={cn('text-xs font-semibold', anyRunning ? 'text-success' : 'text-tertiary')}>
+            {anyRunning ? `${Object.values(statusMap).filter(Boolean).length} Running` : 'Paused'}
+          </span>
         </div>
       </header>
 
       {/* Top Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <StatusCard isActive={isActive} onToggle={handleToggle} />
+        {/* System Control — multi-pipeline */}
+        <div className="bg-back-200 rounded-2xl p-6 border shadow-(--shadow-soft) transition-all flex flex-col">
+          <div className="flex items-center gap-2 mb-1">
+            <Radio className="w-4 h-4 text-accent" />
+            <h3 className="text-lg font-semibold text-primary">System Control</h3>
+          </div>
+          <p className="text-sm text-secondary leading-relaxed mb-5">
+            Toggle each pipeline independently. Active pipelines process files in real-time.
+          </p>
+
+          {pipelines.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center py-6 text-center">
+              <p className="text-sm text-secondary">No pipelines configured.</p>
+              <button
+                onClick={() => onTabChange('Settings')}
+                className="mt-3 text-sm font-medium text-accent hover:opacity-80 transition-opacity cursor-pointer"
+              >
+                Go to Settings →
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {pipelines.map((pipeline) => {
+                const isRunning = statusMap[pipeline.id] ?? false;
+                const isToggling = togglingId === pipeline.id;
+                return (
+                  <div
+                    key={pipeline.id}
+                    className={cn(
+                      'flex items-center justify-between px-4 py-3 rounded-xl border transition-all',
+                      isRunning
+                        ? 'border-success/30 bg-success/5'
+                        : 'border-bc-100 bg-back-100'
+                    )}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={cn('w-2 h-2 rounded-full shrink-0', isRunning ? 'bg-success animate-pulse' : 'bg-tertiary/50')} />
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-primary truncate">{pipeline.name}</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleToggle(pipeline)}
+                      disabled={isToggling}
+                      className={cn(
+                        'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer shrink-0 ml-3',
+                        isRunning
+                          ? 'bg-danger/10 text-danger hover:bg-danger/20 border border-danger/20'
+                          : 'bg-accent/10 text-accent hover:bg-accent/20 border border-accent/20',
+                        isToggling && 'opacity-50 pointer-events-none'
+                      )}
+                    >
+                      {isRunning
+                        ? <><Pause className="w-3.5 h-3.5" /> Pause</>
+                        : <><Play className="w-3.5 h-3.5" /> Start</>
+                      }
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         <StorageCard />
       </div>
 
-      {/* Animation Section */}
-      <div className="bg-back-200 rounded-2xl p-8 border border-bc-100 flex items-center justify-center gap-8 relative overflow-hidden">
-
-        {/* Watched Folder */}
-        <button
-          onClick={() => openFolder(sourceFolder)}
-          title={sourceFolder || 'Watched Folder'}
-          className="z-10 flex flex-col items-center gap-3 cursor-pointer hover:scale-105 transition-transform"
-        >
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center border border-bc-100 shadow-md bg-back-100">
-            <FolderOpen className="w-8 h-8 text-secondary" />
+      {/* Pipeline Flow Visualization */}
+      {pipelines.length > 0 && (
+        <div className="bg-back-200 rounded-2xl border border-bc-100 overflow-hidden">
+          {/* Section header */}
+          <div className="px-6 py-4 border-b border-bc-100 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-primary">Pipeline Flows</h3>
+            <span className="text-xs text-secondary">{pipelines.length} pipeline{pipelines.length !== 1 ? 's' : ''}</span>
           </div>
-          <div className="text-center">
-            <span className="block text-xs font-semibold text-secondary">Watched Folder</span>
-            <span className="block text-[10px] text-secondary/60 max-w-[90px] truncate mt-0.5">{"("}{folderName(sourceFolder)}{")"}</span>
-          </div>
-        </button>
 
-        {/* Animated path */}
-        <div className="flex-1 max-w-[200px] h-[60px] relative flex items-center -translate-y-1/2">
-          <svg viewBox="0 0 200 60" className="w-full h-full overflow-visible" preserveAspectRatio="none">
-            <motion.path
-              d="M 0 40 Q 100 0 200 40"
-              fill="none"
-              stroke={isActive ? "var(--color-accent)" : "var(--color-tertiary)"}
-              strokeWidth={isActive ? 3 : 2}
-              strokeDasharray="8 8"
-              opacity={isActive ? 1 : 0.3}
-              initial={{ strokeDashoffset: 16 }}
-              animate={{ strokeDashoffset: isActive ? 0 : 16 }}
-              transition={{ duration: isActive ? 0.5 : 0, repeat: isActive ? Infinity : 0, ease: "linear" }}
-            />
-          </svg>
+          <div className="divide-y divide-bc-100">
+            {pipelines.map((pipeline) => {
+              const isRunning = statusMap[pipeline.id] ?? false;
+              return (
+                <div
+                  key={pipeline.id}
+                  className={cn(
+                    'px-6 py-5 flex items-center gap-4 transition-colors',
+                    isRunning ? 'bg-success/5' : 'bg-back-100/50'
+                  )}
+                >
+                  {/* Pipeline label */}
+                  <div className="w-28 shrink-0">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <div className={cn(
+                        'w-1.5 h-1.5 rounded-full shrink-0',
+                        isRunning ? 'bg-success animate-pulse' : 'bg-tertiary/40'
+                      )} />
+                      <span className="text-xs font-semibold text-primary truncate">{pipeline.name}</span>
+                    </div>
+                    <span className={cn(
+                      'text-[10px] font-medium',
+                      isRunning ? 'text-success' : 'text-tertiary'
+                    )}>
+                      {isRunning ? 'Running' : 'Paused'}
+                    </span>
+                  </div>
+
+                  {/* Source folder */}
+                  <button
+                    onClick={() => openFolder(pipeline.sourceFolder)}
+                    title={pipeline.sourceFolder || 'Watched Folder'}
+                    disabled={!pipeline.sourceFolder}
+                    className="flex flex-col items-center gap-1.5 cursor-pointer hover:scale-105 transition-transform disabled:opacity-40 disabled:pointer-events-none shrink-0"
+                  >
+                    <div className={cn(
+                      'w-11 h-11 rounded-xl flex items-center justify-center border shadow-sm transition-all',
+                      isRunning
+                        ? 'border-accent/20 bg-accent/5'
+                        : 'border-bc-100 bg-back-200'
+                    )}>
+                      <FolderOpen className={cn('w-5 h-5', isRunning ? 'text-accent' : 'text-secondary')} />
+                    </div>
+                    <span className="text-[9px] text-secondary/70 max-w-[64px] truncate font-mono leading-none">
+                      {folderName(pipeline.sourceFolder) || '—'}
+                    </span>
+                  </button>
+
+                  {/* Animated arrow */}
+                  <div className="flex-1 h-10 relative flex items-center min-w-0">
+                    <svg
+                      viewBox="0 0 160 30"
+                      className="w-full h-full overflow-visible -translate-y-1/5"
+                      preserveAspectRatio="none"
+                    >
+                      <motion.path
+                        d="M 0 15 Q 80 0 160 15"
+                        fill="none"
+                        stroke={isRunning ? 'var(--color-accent)' : 'var(--color-tertiary)'}
+                        strokeWidth={1.5}
+                        strokeDasharray="6 5"
+                        opacity={isRunning ? 1 : 0.25}
+                        initial={{ strokeDashoffset: 11 }}
+                        animate={{ strokeDashoffset: isRunning ? 0 : 11 }}
+                        transition={{
+                          duration: isRunning ? 0.5 : 0,
+                          repeat: isRunning ? Infinity : 0,
+                          ease: 'linear',
+                        }}
+                      />
+                    </svg>
+                  </div>
+
+                  {/* Dest folder */}
+                  <button
+                    onClick={() => openFolder(pipeline.destFolder)}
+                    title={pipeline.destFolder || 'Magic Folder'}
+                    disabled={!pipeline.destFolder}
+                    className="flex flex-col items-center gap-1.5 cursor-pointer hover:scale-105 transition-transform disabled:opacity-40 disabled:pointer-events-none shrink-0"
+                  >
+                    <div className={cn(
+                      'w-11 h-11 rounded-xl flex items-center justify-center border transition-all',
+                      isRunning
+                        ? 'bg-accent/10 border-accent/30 shadow-[0_0_12px_var(--color-accent)]'
+                        : 'border-bc-100 bg-back-200'
+                    )}>
+                      <FolderDown className={cn('w-5 h-5', isRunning ? 'text-accent' : 'text-secondary')} />
+                    </div>
+                    <span className="text-[9px] text-secondary/70 max-w-[64px] truncate font-mono leading-none">
+                      {folderName(pipeline.destFolder) || '—'}
+                    </span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </div>
-
-        {/* Magic / Dest Folder */}
-        <button
-          onClick={() => openFolder(destFolder)}
-          title={destFolder || 'Magic Folder'}
-          className="z-10 flex flex-col items-center gap-3 cursor-pointer hover:scale-105 transition-transform"
-        >
-          <div className="w-16 h-16 rounded-2xl bg-accent/10 flex items-center justify-center border border-accent/20 shadow-[0_0_15px_var(--color-accent)]">
-            <FolderDown className="w-8 h-8 text-accent" />
-          </div>
-          <div className="text-center">
-            <span className="block text-xs font-semibold text-accent">Magic Folder</span>
-            <span className="block text-[10px] text-accent/60 max-w-[90px] truncate mt-0.5">{"("}{folderName(destFolder)}{")"}</span>
-          </div>
-        </button>
-      </div>
+      )}
 
       {/* Bottom Section */}
       <div className="pt-2">
@@ -114,4 +259,3 @@ export function Dashboard({ onTabChange }: { onTabChange: (tab: any) => void }) 
     </div>
   );
 }
-

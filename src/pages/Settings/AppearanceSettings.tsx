@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Monitor, Moon, Sun, Palette } from 'lucide-react';
+import { Monitor, Moon, Sun, Palette, Globe } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { ACCENT_THEMES } from '../../lib/themes';
+import { useI18n, LOCALE_LIST, type TranslationKey } from '../../i18n';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -14,6 +15,7 @@ export function AppearanceSettings() {
   const [theme, setTheme] = useState<ThemeMode>('system');
   const [accent, setAccent] = useState(ACCENT_THEMES[0].name);
   const [loading, setLoading] = useState(true);
+  const { t, locale, setLocale } = useI18n();
 
   // Load config on mount
   useEffect(() => {
@@ -79,10 +81,10 @@ export function AppearanceSettings() {
     }
   }, [accent, loading]);
 
-  const themes = [
-    { id: 'light', label: 'Light', icon: Sun },
-    { id: 'dark', label: 'Dark', icon: Moon },
-    { id: 'system', label: 'System', icon: Monitor },
+  const themes: { id: ThemeMode; labelKey: TranslationKey; icon: typeof Sun }[] = [
+    { id: 'light', labelKey: 'appearance.light', icon: Sun },
+    { id: 'dark', labelKey: 'appearance.dark', icon: Moon },
+    { id: 'system', labelKey: 'appearance.system', icon: Monitor },
   ];
 
   if (loading) return <div className="h-32 animate-pulse bg-back-200 border border-bc-100 rounded-2xl mb-8" />;
@@ -91,20 +93,20 @@ export function AppearanceSettings() {
     <div className="bg-back-200 border border-bc-100 rounded-2xl p-8 mb-8">
       <h3 className="text-primary font-semibold text-lg mb-6 flex items-center gap-2">
         <Palette className="w-5 h-5 text-accent" />
-        Appearance
+        {t('appearance.title')}
       </h3>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         {/* Theme Radio */}
         <div>
-          <p className="text-sm text-secondary font-medium mb-4">Theme Preference</p>
+          <p className="text-sm text-secondary font-medium mb-4">{t('appearance.themePreference')}</p>
           <div className="flex gap-4">
-            {themes.map((t) => {
-              const Icon = t.icon;
-              const isActive = theme === t.id;
+            {themes.map((item) => {
+              const Icon = item.icon;
+              const isActive = theme === item.id;
               return (
                 <label
-                  key={t.id}
+                  key={item.id}
                   className={cn(
                     "flex-1 flex flex-col items-center justify-center gap-2 p-4 rounded-xl border cursor-pointer transition-all",
                     isActive
@@ -115,14 +117,14 @@ export function AppearanceSettings() {
                   <input
                     type="radio"
                     name="theme"
-                    value={t.id}
+                    value={item.id}
                     checked={isActive}
-                    onChange={() => setTheme(t.id as ThemeMode)}
+                    onChange={() => setTheme(item.id)}
                     className="sr-only"
                   />
                   <Icon className={cn("w-6 h-6", isActive ? "text-accent" : "text-tertiary")} />
                   <span className={cn("text-sm font-medium", isActive ? "text-accent" : "text-secondary")}>
-                    {t.label}
+                    {t(item.labelKey)}
                   </span>
                 </label>
               );
@@ -132,7 +134,7 @@ export function AppearanceSettings() {
 
         {/* Accent Colors */}
         <div>
-          <p className="text-sm text-secondary font-medium mb-4">Accent Color</p>
+          <p className="text-sm text-secondary font-medium mb-4">{t('appearance.accentColor')}</p>
           <div className="flex flex-wrap gap-2.5">
             {ACCENT_THEMES.map((themeOption) => {
               const isActive = accent === themeOption.name;
@@ -150,6 +152,33 @@ export function AppearanceSettings() {
               );
             })}
           </div>
+        </div>
+      </div>
+
+      {/* Language Selector */}
+      <div className="mt-8 pt-6 border-t border-bc-100">
+        <div className="flex items-center gap-2 mb-4">
+          <Globe className="w-4 h-4 text-accent" />
+          <p className="text-sm text-secondary font-medium">{t('settings.language')}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {LOCALE_LIST.map((loc) => {
+            const isActive = locale === loc.code;
+            return (
+              <button
+                key={loc.code}
+                onClick={() => setLocale(loc.code)}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg text-sm font-medium transition-all cursor-pointer',
+                  isActive
+                    ? 'bg-accent text-white shadow-sm'
+                    : 'bg-back-100 text-secondary border border-bc-100 hover:text-primary hover:border-accent/40'
+                )}
+              >
+                {loc.label}
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

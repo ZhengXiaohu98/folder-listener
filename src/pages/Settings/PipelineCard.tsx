@@ -6,6 +6,7 @@ import {
 import { cn } from '../../lib/utils';
 import Editor from '@monaco-editor/react';
 import { CompressionPanel, type CompressionValues } from './CompressionPanel';
+import { useI18n } from '../../i18n';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -59,7 +60,10 @@ console.log("File processed:", file.name);
 // ---------------------------------------------------------------------------
 // FolderInput
 // ---------------------------------------------------------------------------
-function FolderInput({ value, onChange, onBrowse }: { value: string; onChange: (v: string) => void; onBrowse: () => void }) {
+function FolderInput({ value, onChange, onBrowse, placeholder, browseLabel }: {
+  value: string; onChange: (v: string) => void; onBrowse: () => void;
+  placeholder: string; browseLabel: string;
+}) {
   return (
     <div className="flex items-center gap-2">
       <div className="flex-1 flex items-center gap-2 px-3 py-2 border border-bc-100 rounded-lg focus-within:ring-1 ring-accent transition-all bg-back-100">
@@ -69,14 +73,14 @@ function FolderInput({ value, onChange, onBrowse }: { value: string; onChange: (
           value={value}
           onChange={(e) => onChange(e.target.value)}
           className="flex-1 bg-transparent border-none outline-none font-mono text-xs placeholder:text-tertiary text-primary"
-          placeholder="Select a folder..."
+          placeholder={placeholder}
         />
       </div>
       <button
         onClick={onBrowse}
         className="px-3 py-2 border border-bc-100 bg-back-200 hover:bg-back-300 rounded-lg text-xs font-medium text-primary transition-colors cursor-pointer shrink-0"
       >
-        Browse
+        {browseLabel}
       </button>
     </div>
   );
@@ -145,6 +149,7 @@ export function PipelineCard({ pipeline, index, editorTheme, onUpdate, onDelete 
   const [nameInput, setNameInput] = useState(pipeline.name);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { t } = useI18n();
 
   const update = (partial: Partial<Pipeline>) => {
     onUpdate({ ...pipeline, ...partial });
@@ -156,14 +161,14 @@ export function PipelineCard({ pipeline, index, editorTheme, onUpdate, onDelete 
     if (!folderPath) return;
     if (type === 'dest') {
       if (isDestInsideSource(pipeline.sourceFolder, folderPath)) {
-        setDestError('Destination cannot be inside the source folder — this would cause an infinite loop.');
+        setDestError(t('pipeline.destInsideSource'));
         return;
       }
       setDestError(null);
       update({ destFolder: folderPath });
     } else {
       if (pipeline.destFolder && isDestInsideSource(folderPath, pipeline.destFolder)) {
-        setDestError('Destination cannot be inside the new source folder.');
+        setDestError(t('pipeline.destInsideNewSource'));
       } else {
         setDestError(null);
       }
@@ -173,7 +178,7 @@ export function PipelineCard({ pipeline, index, editorTheme, onUpdate, onDelete 
 
   const handleSourceChange = (val: string) => {
     if (pipeline.destFolder && isDestInsideSource(val, pipeline.destFolder)) {
-      setDestError('Destination cannot be inside the source folder — this would cause an infinite loop.');
+      setDestError(t('pipeline.destInsideSource'));
     } else {
       setDestError(null);
     }
@@ -182,7 +187,7 @@ export function PipelineCard({ pipeline, index, editorTheme, onUpdate, onDelete 
 
   const handleDestChange = (val: string) => {
     if (isDestInsideSource(pipeline.sourceFolder, val)) {
-      setDestError('Destination cannot be inside the source folder — this would cause an infinite loop.');
+      setDestError(t('pipeline.destInsideSource'));
       return;
     }
     setDestError(null);
@@ -283,12 +288,12 @@ export function PipelineCard({ pipeline, index, editorTheme, onUpdate, onDelete 
             pipeline.enabled ? 'bg-success/10 text-success' : 'bg-back-300 text-tertiary'
           )}>
             <div className={cn('w-1.5 h-1.5 rounded-full', pipeline.enabled ? 'bg-success' : 'bg-tertiary')} />
-            {pipeline.enabled ? 'Active' : 'Inactive'}
+            {pipeline.enabled ? t('pipeline.active') : t('pipeline.inactive')}
           </div>
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(pipeline.id); }}
             className="p-1.5 text-tertiary hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors cursor-pointer"
-            title="Delete pipeline"
+            title={t('pipeline.deletePipeline')}
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -303,20 +308,32 @@ export function PipelineCard({ pipeline, index, editorTheme, onUpdate, onDelete 
           {/* Folders */}
           <CollapsibleSection
             icon={<FolderOpen className="w-4 h-4 text-accent" />}
-            title="Folders"
+            title={t('pipeline.folders')}
             expanded={foldersExpanded}
             onToggle={() => setFoldersExpanded(!foldersExpanded)}
           >
             <div className="space-y-4">
               <div>
-                <p className="text-xs font-semibold text-primary mb-1">Source Folder</p>
-                <p className="text-[11px] text-secondary mb-2">The folder watched for new files.</p>
-                <FolderInput value={pipeline.sourceFolder} onChange={handleSourceChange} onBrowse={() => handleBrowse('source')} />
+                <p className="text-xs font-semibold text-primary mb-1">{t('pipeline.sourceFolder')}</p>
+                <p className="text-[11px] text-secondary mb-2">{t('pipeline.sourceFolderDesc')}</p>
+                <FolderInput
+                  value={pipeline.sourceFolder}
+                  onChange={handleSourceChange}
+                  onBrowse={() => handleBrowse('source')}
+                  placeholder={t('pipeline.selectFolder')}
+                  browseLabel={t('pipeline.browse')}
+                />
               </div>
               <div>
-                <p className="text-xs font-semibold text-primary mb-1">Destination Folder</p>
-                <p className="text-[11px] text-secondary mb-2">Where processed files will be saved.</p>
-                <FolderInput value={pipeline.destFolder} onChange={handleDestChange} onBrowse={() => handleBrowse('dest')} />
+                <p className="text-xs font-semibold text-primary mb-1">{t('pipeline.destFolder')}</p>
+                <p className="text-[11px] text-secondary mb-2">{t('pipeline.destFolderDesc')}</p>
+                <FolderInput
+                  value={pipeline.destFolder}
+                  onChange={handleDestChange}
+                  onBrowse={() => handleBrowse('dest')}
+                  placeholder={t('pipeline.selectFolder')}
+                  browseLabel={t('pipeline.browse')}
+                />
                 {destError && (
                   <p className="mt-2 text-xs text-red-500 flex items-center gap-1.5">
                     <MessageCircleWarning className="w-3.5 h-3.5 shrink-0" />
@@ -330,7 +347,7 @@ export function PipelineCard({ pipeline, index, editorTheme, onUpdate, onDelete 
           {/* Compression */}
           <CollapsibleSection
             icon={<Settings2 className="w-4 h-4 text-accent" />}
-            title="Compression"
+            title={t('pipeline.compression')}
             badge={
               <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-accent/25 text-secondary ml-1">
                 {pipeline.compressionLevel}
@@ -345,7 +362,7 @@ export function PipelineCard({ pipeline, index, editorTheme, onUpdate, onDelete 
           {/* Post-Process Hook */}
           <CollapsibleSection
             icon={<Webhook className="w-4 h-4 text-accent" />}
-            title="Post-Process Hook"
+            title={t('pipeline.postProcessHook')}
             expanded={hookExpanded}
             onToggle={() => setHookExpanded(!hookExpanded)}
             headerExtra={
@@ -363,7 +380,7 @@ export function PipelineCard({ pipeline, index, editorTheme, onUpdate, onDelete 
                 )}
               >
                 {pipeline.hookEnabled ? <Power className="w-3 h-3" /> : <PowerOff className="w-3 h-3" />}
-                {pipeline.hookEnabled ? 'Enabled' : 'Disabled'}
+                {pipeline.hookEnabled ? t('pipeline.hookEnabled') : t('pipeline.hookDisabled')}
               </button>
             }
           >
@@ -371,13 +388,13 @@ export function PipelineCard({ pipeline, index, editorTheme, onUpdate, onDelete 
               <div className="flex items-center justify-between px-3 py-2 border-b border-bc-100 bg-back-200">
                 <div className="flex items-center gap-2 text-xs font-medium text-secondary">
                   <Code className="w-3.5 h-3.5 text-accent" />
-                  <span>Hook Function Body (async)</span>
+                  <span>{t('pipeline.hookFunctionBody')}</span>
                 </div>
                 <div className="text-xs font-medium h-6 flex items-center">
-                  {saveStatus === 'saving' && <span className="text-tertiary animate-pulse">Saving…</span>}
+                  {saveStatus === 'saving' && <span className="text-tertiary animate-pulse">{t('pipeline.saving')}</span>}
                   {saveStatus === 'saved' && (
                     <span className="text-accent flex items-center gap-1">
-                      <Save className="w-3 h-3" /> Saved
+                      <Save className="w-3 h-3" /> {t('pipeline.saved')}
                     </span>
                   )}
                 </div>

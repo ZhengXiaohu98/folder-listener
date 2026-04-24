@@ -3,6 +3,7 @@ import {
   SquareDashedMousePointer, ChevronDown,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useI18n, type TranslationKey } from '../../i18n';
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -106,19 +107,20 @@ interface CompressionPanelProps {
 
 export function CompressionPanel({ values, onChange }: CompressionPanelProps) {
   const set = (partial: Partial<CompressionValues>) => onChange({ ...values, ...partial });
+  const { t } = useI18n();
 
-  const levels = [
-    { id: 'Low', icon: SquareDashedBottom, desc: '~20% reduction. Minimal quality loss.' },
-    { id: 'Medium', icon: SquareDashedTopSolid, desc: '~50% reduction. Balanced profile.' },
-    { id: 'High', icon: SquareDashed, desc: '~80% reduction. Noticeable artifacts.' },
-    { id: 'Custom', icon: SquareDashedMousePointer, desc: 'Choose the compression ratio yourself.' },
+  const levels: { id: string; icon: typeof SquareDashedBottom; labelKey: TranslationKey; descKey: TranslationKey }[] = [
+    { id: 'Low', icon: SquareDashedBottom, labelKey: 'compression.low', descKey: 'compression.lowDesc' },
+    { id: 'Medium', icon: SquareDashedTopSolid, labelKey: 'compression.medium', descKey: 'compression.mediumDesc' },
+    { id: 'High', icon: SquareDashed, labelKey: 'compression.high', descKey: 'compression.highDesc' },
+    { id: 'Custom', icon: SquareDashedMousePointer, labelKey: 'compression.custom', descKey: 'compression.customDesc' },
   ];
 
   return (
     <div className="space-y-5">
       {/* Compression Level */}
       <div>
-        <p className="text-xs font-semibold text-secondary uppercase tracking-wide mb-2">Compression Level</p>
+        <p className="text-xs font-semibold text-secondary uppercase tracking-wide mb-2">{t('compression.level')}</p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
           {levels.map((l) => {
             const Icon = l.icon;
@@ -148,8 +150,8 @@ export function CompressionPanel({ values, onChange }: CompressionPanelProps) {
                     {isActive && <div className="w-1.5 h-1.5 rounded-full bg-accent" />}
                   </div>
                 </div>
-                <h4 className="text-xs font-semibold text-primary mb-0.5">{l.id}</h4>
-                <p className="text-[10px] text-secondary leading-relaxed">{l.desc}</p>
+                <h4 className="text-xs font-semibold text-primary mb-0.5">{t(l.labelKey)}</h4>
+                <p className="text-[10px] text-secondary leading-relaxed">{t(l.descKey)}</p>
               </div>
             );
           })}
@@ -159,7 +161,7 @@ export function CompressionPanel({ values, onChange }: CompressionPanelProps) {
           <div className="mt-3 p-4 rounded-xl border border-accent/30 bg-accent/5 space-y-4 animate-in fade-in slide-in-from-top-1">
             <div>
               <div className="flex justify-between mb-1.5">
-                <label className="text-xs font-medium text-primary">Quality</label>
+                <label className="text-xs font-medium text-primary">{t('compression.quality')}</label>
                 <span className="text-xs text-accent font-medium">{values.customOptions.quality}%</span>
               </div>
               <input
@@ -170,7 +172,7 @@ export function CompressionPanel({ values, onChange }: CompressionPanelProps) {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-primary mb-1.5">Max Width (px)</label>
+              <label className="block text-xs font-medium text-primary mb-1.5">{t('compression.maxWidth')}</label>
               <input
                 type="number"
                 value={values.customOptions.maxWidth}
@@ -187,8 +189,8 @@ export function CompressionPanel({ values, onChange }: CompressionPanelProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Supported Formats */}
         <div className="border border-bc-100 rounded-xl p-4 bg-back-200">
-          <h4 className="text-xs font-semibold text-primary mb-0.5">Supported Formats</h4>
-          <p className="text-[11px] text-secondary mb-3">File types that trigger processing.</p>
+          <h4 className="text-xs font-semibold text-primary mb-0.5">{t('compression.supportedFormats')}</h4>
+          <p className="text-[11px] text-secondary mb-3">{t('compression.supportedFormatsDesc')}</p>
           <div className="divide-y divide-bc-100/50">
             <FormatCheckbox label="JPEG / JPG" tag="IMAGE" checked={values.supportedFormats.jpeg} onChange={(v) => set({ supportedFormats: { ...values.supportedFormats, jpeg: v } })} />
             <FormatCheckbox label="PNG" tag="IMAGE" checked={values.supportedFormats.png} onChange={(v) => set({ supportedFormats: { ...values.supportedFormats, png: v } })} />
@@ -201,19 +203,19 @@ export function CompressionPanel({ values, onChange }: CompressionPanelProps) {
 
         {/* Advanced Options */}
         <div className="border border-bc-100 rounded-xl p-4 bg-back-200">
-          <h4 className="text-xs font-semibold text-primary mb-0.5">Advanced Options</h4>
-          <p className="text-[11px] text-secondary mb-3">Fine-tune file handling post-compression.</p>
+          <h4 className="text-xs font-semibold text-primary mb-0.5">{t('compression.advancedOptions')}</h4>
+          <p className="text-[11px] text-secondary mb-3">{t('compression.advancedOptionsDesc')}</p>
           <div className="divide-y divide-bc-100/50">
             <SettingsToggle
-              title="Auto-delete original"
-              description="Move originals to trash after processing."
+              title={t('compression.autoDelete')}
+              description={t('compression.autoDeleteDesc')}
               checked={values.advancedOptions.autoDelete}
               onChange={(v) => set({ advancedOptions: { ...values.advancedOptions, autoDelete: v } })}
             />
             <div>
               <SettingsToggle
-                title="Custom Suffix"
-                description="Append a suffix to the original filename."
+                title={t('compression.customSuffix')}
+                description={t('compression.customSuffixDesc')}
                 checked={!!values.advancedOptions.enableCustomSuffix}
                 onChange={(v) => set({ advancedOptions: { ...values.advancedOptions, enableCustomSuffix: v } })}
               />
@@ -231,8 +233,8 @@ export function CompressionPanel({ values, onChange }: CompressionPanelProps) {
             </div>
             <div>
               <SettingsToggle
-                title="Custom Filename"
-                description="Use a custom name when saving processed files."
+                title={t('compression.customFilename')}
+                description={t('compression.customFilenameDesc')}
                 checked={!!values.advancedOptions.enableCustomFileName}
                 onChange={(v) => set({ advancedOptions: { ...values.advancedOptions, enableCustomFileName: v } })}
               />
@@ -254,19 +256,19 @@ export function CompressionPanel({ values, onChange }: CompressionPanelProps) {
 
       {/* Output Format */}
       <div className="border border-bc-100 rounded-xl p-4 bg-back-200">
-        <h4 className="text-xs font-semibold text-primary mb-0.5">Output Format</h4>
-        <p className="text-[11px] text-secondary mb-3">Choose the format processed images are saved as.</p>
+        <h4 className="text-xs font-semibold text-primary mb-0.5">{t('compression.outputFormat')}</h4>
+        <p className="text-[11px] text-secondary mb-3">{t('compression.outputFormatDesc')}</p>
         <div className="relative w-full md:w-1/2">
           <select
             value={values.outputFormat}
             onChange={(e) => set({ outputFormat: e.target.value })}
             className="appearance-none bg-back-100 border border-bc-100 text-primary text-xs rounded-lg focus:ring-accent focus:border-accent block w-full p-2 pr-8 outline-none cursor-pointer"
           >
-            <option value="Original">Keep Original Format</option>
-            <option value="JPEG">Convert to JPEG</option>
-            <option value="PNG">Convert to PNG</option>
-            <option value="WebP">Convert to WebP</option>
-            <option value="AVIF">Convert to AVIF</option>
+            <option value="Original">{t('compression.keepOriginal')}</option>
+            <option value="JPEG">{t('compression.convertTo', { format: 'JPEG' })}</option>
+            <option value="PNG">{t('compression.convertTo', { format: 'PNG' })}</option>
+            <option value="WebP">{t('compression.convertTo', { format: 'WebP' })}</option>
+            <option value="AVIF">{t('compression.convertTo', { format: 'AVIF' })}</option>
           </select>
           <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-secondary">
             <ChevronDown className="w-3.5 h-3.5" />

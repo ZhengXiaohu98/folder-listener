@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { ScrollText, Trash2, RefreshCw, ChevronDown, ChevronRight, ArrowUp } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useI18n, type TranslationKey } from '../../i18n';
 
 type LogLevel = 'success' | 'error' | 'warn' | 'info';
 
@@ -20,11 +21,11 @@ const LEVEL_CONFIG: Record<LogLevel, { label: string; dot: string; text: string;
   info: { label: 'Info', dot: 'bg-sky-500', text: 'text-sky-600 dark:text-sky-400', bg: 'bg-sky-500/8 border-sky-500/20' },
 };
 
-const CATEGORY_LABELS: Record<string, string> = {
-  'file-processing': 'File',
-  hook: 'Hook',
-  app: 'App',
-  watcher: 'Watcher',
+const CATEGORY_KEY_MAP: Record<string, TranslationKey> = {
+  'file-processing': 'logCategory.file',
+  hook: 'logCategory.hook',
+  app: 'logCategory.app',
+  watcher: 'logCategory.watcher',
 };
 
 /**
@@ -50,6 +51,10 @@ function LogRow({ entry }: { entry: LogEntry }) {
   const [expanded, setExpanded] = useState(false);
   const cfg = LEVEL_CONFIG[entry.level];
   const { pipelineName, cleanMessage } = extractPipeline(entry.message);
+  const { t } = useI18n();
+
+  const categoryKey = CATEGORY_KEY_MAP[entry.category];
+  const categoryLabel = categoryKey ? t(categoryKey) : entry.category;
 
   return (
     <div className={cn('border rounded-xl overflow-hidden transition-all', cfg.bg)}>
@@ -77,7 +82,7 @@ function LogRow({ entry }: { entry: LogEntry }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={cn('text-xs font-semibold uppercase tracking-wide', cfg.text)}>
-              {CATEGORY_LABELS[entry.category] ?? entry.category}
+              {categoryLabel}
             </span>
             {pipelineName && (
               <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-accent/10 text-accent border border-accent/20">
@@ -104,17 +109,6 @@ function LogRow({ entry }: { entry: LogEntry }) {
 }
 
 // ---------------------------------------------------------------------------
-// Filter bar
-// ---------------------------------------------------------------------------
-const FILTER_OPTIONS: { label: string; value: LogLevel | 'all' }[] = [
-  { label: 'All', value: 'all' },
-  { label: 'Errors', value: 'error' },
-  { label: 'Warnings', value: 'warn' },
-  { label: 'Success', value: 'success' },
-  { label: 'Info', value: 'info' },
-];
-
-// ---------------------------------------------------------------------------
 // LogsPage
 // ---------------------------------------------------------------------------
 const PAGE_SIZE = 50;
@@ -127,6 +121,7 @@ export function LogsPage() {
   const [page, setPage] = useState(1);
   // Count of new entries that arrived while the user is NOT on page 1
   const [newCount, setNewCount] = useState(0);
+  const { t } = useI18n();
 
   // Keep a ref so the live-push handler can read the current page without
   // being in its own dependency array (avoids re-registering the listener on
@@ -137,6 +132,14 @@ export function LogsPage() {
   filterRef.current = filter;
 
   const listRef = useRef<HTMLDivElement>(null);
+
+  const FILTER_OPTIONS: { labelKey: TranslationKey; value: LogLevel | 'all' }[] = [
+    { labelKey: 'logs.filterAll', value: 'all' },
+    { labelKey: 'logs.filterErrors', value: 'error' },
+    { labelKey: 'logs.filterWarnings', value: 'warn' },
+    { labelKey: 'logs.filterSuccess', value: 'success' },
+    { labelKey: 'logs.filterInfo', value: 'info' },
+  ];
 
   // ── Fetch a specific page ──────────────────────────────────────────────
   const fetchLogs = useCallback(async (p: number, f: LogLevel | 'all') => {
@@ -198,7 +201,7 @@ export function LogsPage() {
 
   // ── Actions ───────────────────────────────────────────────────────────
   const handleClear = async () => {
-    if (!confirm('Clear all logs? This cannot be undone.')) return;
+    if (!confirm(t('logs.clearConfirm'))) return;
     try {
       if ((window as any).ipcRenderer) {
         await (window as any).ipcRenderer.invoke('logs:clear');
@@ -225,9 +228,9 @@ export function LogsPage() {
       {/* Header */}
       <header className="w-full flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-primary tracking-tight transition-colors">Logs</h1>
+          <h1 className="text-3xl font-bold text-primary tracking-tight transition-colors">{t('logs.title')}</h1>
           <p className="text-secondary mt-1.5 font-medium transition-colors">
-            Real-time activity from all pipelines, hooks, and the application.
+            {t('logs.subtitle')}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -236,14 +239,14 @@ export function LogsPage() {
             className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-secondary border border-bc-100 rounded-xl hover:bg-back-300 transition-colors cursor-pointer"
           >
             <RefreshCw className="w-4 h-4" />
-            Refresh
+            {t('logs.refresh')}
           </button>
           <button
             onClick={handleClear}
             className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-500 border border-red-500/30 rounded-xl hover:bg-red-500/10 transition-colors cursor-pointer"
           >
             <Trash2 className="w-4 h-4" />
-            Clear
+            {t('logs.clear')}
           </button>
         </div>
       </header>
@@ -261,7 +264,7 @@ export function LogsPage() {
                 : 'text-secondary hover:text-primary hover:bg-back-300'
             )}
           >
-            {opt.label}
+            {t(opt.labelKey)}
           </button>
         ))}
       </div>
@@ -273,7 +276,7 @@ export function LogsPage() {
           className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-accent/10 border border-accent/30 text-accent text-sm font-semibold hover:bg-accent/20 transition-colors cursor-pointer animate-in fade-in slide-in-from-top-2 duration-200"
         >
           <ArrowUp className="w-4 h-4" />
-          {newCount} new entr{newCount === 1 ? 'y' : 'ies'} — click to jump to latest
+          {t('logs.newEntries', { count: newCount }).split('|')[newCount !== 1 ? 1 : 0]?.trim() ?? `${newCount}`}
         </button>
       )}
 
@@ -288,8 +291,8 @@ export function LogsPage() {
             <div className="w-16 h-16 rounded-full bg-back-100 border border-bc-100 flex items-center justify-center mb-4">
               <ScrollText className="w-7 h-7 text-tertiary" />
             </div>
-            <h3 className="text-lg font-medium text-primary mb-1">No logs yet</h3>
-            <p className="text-secondary text-sm">Activity will appear here as files are processed.</p>
+            <h3 className="text-lg font-medium text-primary mb-1">{t('logs.noLogs')}</h3>
+            <p className="text-secondary text-sm">{t('logs.noLogsDesc')}</p>
           </div>
         ) : (
           <div ref={listRef} className="flex flex-col gap-2 overflow-y-auto pr-1">
@@ -302,9 +305,9 @@ export function LogsPage() {
       {!loading && totalPages > 1 && (
         <div className="flex items-center justify-between pt-1">
           <span className="text-sm text-secondary">
-            {total.toLocaleString()} entries total
+            {t('logs.entriesTotal', { count: total.toLocaleString() })}
             {page > 1 && newCount > 0 && (
-              <span className="ml-2 text-accent text-xs font-medium">+{newCount} new</span>
+              <span className="ml-2 text-accent text-xs font-medium">{t('logs.newBadge', { count: newCount })}</span>
             )}
           </span>
           <div className="flex items-center gap-1">
@@ -313,7 +316,7 @@ export function LogsPage() {
               onClick={() => fetchLogs(page - 1, filter)}
               className="px-3 py-1.5 text-sm rounded-lg border border-bc-100 text-secondary hover:bg-back-300 disabled:opacity-40 transition-colors cursor-pointer"
             >
-              Previous
+              {t('logs.previous')}
             </button>
             <span className="px-3 py-1.5 text-sm text-secondary tabular-nums">
               {page} / {totalPages}
@@ -323,7 +326,7 @@ export function LogsPage() {
               onClick={() => fetchLogs(page + 1, filter)}
               className="px-3 py-1.5 text-sm rounded-lg border border-bc-100 text-secondary hover:bg-back-300 disabled:opacity-40 transition-colors cursor-pointer"
             >
-              Next
+              {t('logs.next')}
             </button>
           </div>
         </div>

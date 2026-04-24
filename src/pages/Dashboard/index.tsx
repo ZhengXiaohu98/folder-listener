@@ -4,6 +4,7 @@ import { StorageCard } from './StorageCard';
 import { FolderOpen, FolderDown, Play, Pause, Radio } from 'lucide-react';
 import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
+import { useI18n } from '../../i18n';
 
 interface Pipeline {
   id: string;
@@ -17,8 +18,9 @@ export function Dashboard({ onTabChange }: { onTabChange: (tab: any) => void }) 
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [statusMap, setStatusMap] = useState<Record<string, boolean>>({});
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const { t } = useI18n();
 
-  const folderName = (p: string) => p ? p.split(/[\\\/]/).pop() || p : '—';
+  const folderName = (p: string) => p ? p.split(/[\\/]/).pop() || p : '—';
 
   const loadData = useCallback(async () => {
     const [config, status] = await Promise.all([
@@ -57,20 +59,21 @@ export function Dashboard({ onTabChange }: { onTabChange: (tab: any) => void }) 
   };
 
   const anyRunning = Object.values(statusMap).some(Boolean);
+  const runningCount = Object.values(statusMap).filter(Boolean).length;
 
   return (
     <div className="space-y-8">
       {/* Header */}
       <header className="flex items-end justify-between pb-2">
         <div>
-          <h1 className="text-3xl font-bold text-primary tracking-tight transition-colors">Overview</h1>
-          <p className="text-secondary mt-1.5 font-medium transition-colors">Your workspace automation at a glance.</p>
+          <h1 className="text-3xl font-bold text-primary tracking-tight transition-colors">{t('dashboard.title')}</h1>
+          <p className="text-secondary mt-1.5 font-medium transition-colors">{t('dashboard.subtitle')}</p>
         </div>
 
         <div className={cn('flex items-center gap-2 px-3 py-1.5 rounded-full border shadow-sm transition-colors', anyRunning ? 'border-success bg-success/10' : 'border-warning bg-warning/20')}>
           <div className={cn('w-2 h-2 rounded-full', anyRunning ? 'bg-success animate-pulse' : 'bg-tertiary')} />
           <span className={cn('text-xs font-semibold', anyRunning ? 'text-success' : 'text-tertiary')}>
-            {anyRunning ? `${Object.values(statusMap).filter(Boolean).length} Running` : 'Paused'}
+            {anyRunning ? t('dashboard.running', { count: runningCount }) : t('dashboard.paused')}
           </span>
         </div>
       </header>
@@ -81,20 +84,20 @@ export function Dashboard({ onTabChange }: { onTabChange: (tab: any) => void }) 
         <div className="bg-back-200 rounded-2xl p-6 border shadow-(--shadow-soft) transition-all flex flex-col">
           <div className="flex items-center gap-2 mb-1">
             <Radio className="w-4 h-4 text-accent" />
-            <h3 className="text-lg font-semibold text-primary">System Control</h3>
+            <h3 className="text-lg font-semibold text-primary">{t('dashboard.systemControl')}</h3>
           </div>
           <p className="text-sm text-secondary leading-relaxed mb-5">
-            Toggle each pipeline independently. Active pipelines process files in real-time.
+            {t('dashboard.systemControlDesc')}
           </p>
 
           {pipelines.length === 0 ? (
             <div className="flex-1 flex flex-col items-center justify-center py-6 text-center">
-              <p className="text-sm text-secondary">No pipelines configured.</p>
+              <p className="text-sm text-secondary">{t('dashboard.noPipelines')}</p>
               <button
                 onClick={() => onTabChange('Settings')}
                 className="mt-3 text-sm font-medium text-accent hover:opacity-80 transition-opacity cursor-pointer"
               >
-                Go to Settings →
+                {t('dashboard.goToSettings')}
               </button>
             </div>
           ) : (
@@ -130,8 +133,8 @@ export function Dashboard({ onTabChange }: { onTabChange: (tab: any) => void }) 
                       )}
                     >
                       {isRunning
-                        ? <><Pause className="w-3.5 h-3.5" /> Pause</>
-                        : <><Play className="w-3.5 h-3.5" /> Start</>
+                        ? <><Pause className="w-3.5 h-3.5" /> {t('dashboard.pause')}</>
+                        : <><Play className="w-3.5 h-3.5" /> {t('dashboard.start')}</>
                       }
                     </button>
                   </div>
@@ -149,8 +152,10 @@ export function Dashboard({ onTabChange }: { onTabChange: (tab: any) => void }) 
         <div className="bg-back-200 rounded-2xl border border-bc-100 overflow-hidden">
           {/* Section header */}
           <div className="px-6 py-4 border-b border-bc-100 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-primary">Pipeline Flows</h3>
-            <span className="text-xs text-secondary">{pipelines.length} pipeline{pipelines.length !== 1 ? 's' : ''}</span>
+            <h3 className="text-sm font-semibold text-primary">{t('dashboard.pipelineFlows')}</h3>
+            <span className="text-xs text-secondary">
+              {t('dashboard.pipelineCount', { count: pipelines.length }).split('|')[pipelines.length !== 1 ? 1 : 0]?.trim() ?? `${pipelines.length}`}
+            </span>
           </div>
 
           <div className="divide-y divide-bc-100">
@@ -177,14 +182,14 @@ export function Dashboard({ onTabChange }: { onTabChange: (tab: any) => void }) 
                       'text-[10px] font-medium',
                       isRunning ? 'text-success' : 'text-tertiary'
                     )}>
-                      {isRunning ? 'Running' : 'Paused'}
+                      {isRunning ? t('dashboard.statusRunning') : t('dashboard.statusPaused')}
                     </span>
                   </div>
 
                   {/* Source folder */}
                   <button
                     onClick={() => openFolder(pipeline.sourceFolder)}
-                    title={pipeline.sourceFolder || 'Watched Folder'}
+                    title={pipeline.sourceFolder || t('pipeline.sourceFolder')}
                     disabled={!pipeline.sourceFolder}
                     className="flex flex-col items-center gap-1.5 cursor-pointer hover:scale-105 transition-transform disabled:opacity-40 disabled:pointer-events-none shrink-0"
                   >
@@ -229,7 +234,7 @@ export function Dashboard({ onTabChange }: { onTabChange: (tab: any) => void }) 
                   {/* Dest folder */}
                   <button
                     onClick={() => openFolder(pipeline.destFolder)}
-                    title={pipeline.destFolder || 'Magic Folder'}
+                    title={pipeline.destFolder || t('pipeline.destFolder')}
                     disabled={!pipeline.destFolder}
                     className="flex flex-col items-center gap-1.5 cursor-pointer hover:scale-105 transition-transform disabled:opacity-40 disabled:pointer-events-none shrink-0"
                   >

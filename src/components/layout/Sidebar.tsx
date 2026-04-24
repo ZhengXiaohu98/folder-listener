@@ -2,6 +2,7 @@ import { LayoutDashboard, Settings, Info, PanelRight, ScrollText, X, ExternalLin
 import type { LucideIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { cn } from '../../lib/utils';
+import { useI18n, type TranslationKey } from '../../i18n';
 import packageJson from '../../../package.json';
 
 export type TabType = 'Dashboard' | 'Settings' | 'Logs';
@@ -14,11 +15,12 @@ interface SidebarProps {
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const { t } = useI18n();
 
-  const navItems: { icon: LucideIcon; label: TabType }[] = [
-    { icon: LayoutDashboard, label: 'Dashboard' },
-    { icon: ScrollText, label: 'Logs' },
-    { icon: Settings, label: 'Settings' },
+  const navItems: { icon: LucideIcon; label: TabType; translationKey: TranslationKey }[] = [
+    { icon: LayoutDashboard, label: 'Dashboard', translationKey: 'sidebar.dashboard' },
+    { icon: ScrollText, label: 'Logs', translationKey: 'sidebar.logs' },
+    { icon: Settings, label: 'Settings', translationKey: 'sidebar.settings' },
   ];
 
   useEffect(() => {
@@ -64,7 +66,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
                     <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-[95%] bg-accent rounded-r-full shadow-[0_0_8px_var(--accent)] opacity-80" />
                   )}
                   <Icon className={cn("w-4 h-4", isActive ? "text-accent" : "text-tertiary")} />
-                  {item.label}
+                  {t(item.translationKey)}
                 </button>
               );
             })}
@@ -78,7 +80,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-secondary hover:text-primary hover:bg-back-300 transition-colors cursor-pointer"
           >
             <Info className="w-4 h-4" />
-            About
+            {t('sidebar.about')}
           </button>
         </div>
       </aside>
@@ -110,13 +112,13 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
 
             <div className="min-w-0">
               <h2 id="about-title" className="text-lg font-semibold leading-tight">
-                Folder Listener
+                {t('about.title')}
               </h2>
-              <p className="mt-1 text-sm text-secondary">Version {packageJson.version}</p>
+              <p className="mt-1 text-sm text-secondary">{t('about.version', { version: packageJson.version })}</p>
             </div>
 
             <div className="mt-6 rounded-md border border-bc-100 bg-back-200 p-4">
-              <p className="text-xs font-medium uppercase text-tertiary">Developer</p>
+              <p className="text-xs font-medium uppercase text-tertiary">{t('about.developer')}</p>
               <a
                 href="https://github.com/ZhengXiaohu98"
                 target="_blank"

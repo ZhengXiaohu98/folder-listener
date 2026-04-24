@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Image as ImageIcon, ArrowDown } from 'lucide-react';
+import { useI18n } from '../../i18n';
 
 function formatBytes(bytes: number) {
   if (bytes === 0) return '0 B';
@@ -11,6 +12,7 @@ function formatBytes(bytes: number) {
 
 export function ActivityList({ onTabChange }: { onTabChange: (tab: string) => void }) {
   const [activities, setActivities] = useState<any[]>([]);
+  const { t } = useI18n();
 
   useEffect(() => {
     (window as any).watcherAPI.getActivities().then(setActivities);
@@ -24,19 +26,19 @@ export function ActivityList({ onTabChange }: { onTabChange: (tab: string) => vo
   return (
     <div className="bg-back-200 rounded-2xl border border-bc-100 shadow-(--shadow-soft) overflow-hidden transition-all">
       <div className="px-6 py-4 flex items-center justify-between border-b border-bc-100">
-        <h3 className="text-lg font-semibold text-primary">Recent Activity</h3>
+        <h3 className="text-lg font-semibold text-primary">{t('activity.title')}</h3>
         <button
           onClick={() => onTabChange('Logs')}
           className="text-sm font-semibold text-accent hover:opacity-80 transition-opacity cursor-pointer"
         >
-          View Logs →
+          {t('activity.viewLogs')}
         </button>
       </div>
 
       <div className="divide-y divide-bc-100">
         {activities.length === 0 && (
           <div className="p-6 text-center text-secondary text-sm">
-            No recent activity. Start a pipeline to process files.
+            {t('activity.empty')}
           </div>
         )}
         {activities.slice(0, 5).map((item) => {
@@ -59,7 +61,7 @@ export function ActivityList({ onTabChange }: { onTabChange: (tab: string) => vo
                 <div className="text-sm font-medium text-primary">{formatBytes(item.compressedSize)}</div>
                 <div className="text-xs font-medium text-success mt-0.5 flex items-center justify-end gap-1">
                   <ArrowDown className="w-3 h-3" />
-                  {formatBytes(savedSize)} saved
+                  {formatBytes(savedSize)} {t('activity.saved')}
                 </div>
               </div>
             </div>

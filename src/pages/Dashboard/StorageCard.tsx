@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useI18n } from '../../i18n';
 
 function formatBytes(bytes: number) {
   if (bytes === 0) return '0 B';
@@ -10,6 +11,7 @@ function formatBytes(bytes: number) {
 
 export function StorageCard() {
   const [stats, setStats] = useState({ totalSaved: 0, totalFiles: 0 });
+  const { t } = useI18n();
 
   useEffect(() => {
     (window as any).watcherAPI.getStats().then(setStats);
@@ -27,7 +29,7 @@ export function StorageCard() {
 
   return (
     <div className="bg-back-200 rounded-2xl p-6 border border-bc-100 shadow-(--shadow-soft) flex flex-col transition-all">
-      <h3 className="text-lg font-semibold text-primary mb-6">Storage Saved</h3>
+      <h3 className="text-lg font-semibold text-primary mb-6">{t('storage.title')}</h3>
 
       <div className="flex items-baseline justify-center gap-2 mb-8 text-center text-accent">
         <span className="text-5xl font-bold tracking-tight">{sizeValue}</span>
@@ -36,7 +38,7 @@ export function StorageCard() {
 
       <div className="mt-auto">
         <div className="flex items-center text-sm font-semibold gap-2">
-          <span className="text-secondary">Processed Files: </span>
+          <span className="text-secondary">{t('storage.processedFiles')}</span>
           <span className="text-secondary">{stats.totalFiles}</span>
         </div>
       </div>

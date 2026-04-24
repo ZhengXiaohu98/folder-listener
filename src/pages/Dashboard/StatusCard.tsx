@@ -1,12 +1,15 @@
 import { Play, Pause } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useI18n } from '../../i18n';
 
 export function StatusCard({ isActive, onToggle }: { isActive: boolean, onToggle: () => void }) {
+  const { t } = useI18n();
+
   return (
     <div className="bg-back-200 rounded-2xl p-6 border shadow-(--shadow-soft) transition-all flex flex-col justify-between">
-      <h3 className="text-lg font-semibold text-primary mb-2">System Control</h3>
+      <h3 className="text-lg font-semibold text-primary mb-2">{t('status.systemControl')}</h3>
       <p className="text-sm text-secondary leading-relaxed mb-6">
-        {isActive ? 'The system is actively listening for new files.' : 'System is paused. Click start to resume processing.'}
+        {isActive ? t('status.activeDesc') : t('status.pausedDesc')}
       </p>
 
       <button
@@ -19,7 +22,7 @@ export function StatusCard({ isActive, onToggle }: { isActive: boolean, onToggle
         )}
       >
         {isActive ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-        {isActive ? 'Pause' : 'Start Watching'}
+        {isActive ? t('status.pause') : t('status.startWatching')}
       </button>
     </div>
   );

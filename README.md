@@ -8,6 +8,14 @@ Magic Folder is a professional-grade desktop utility designed to streamline your
 
 ## Core Features
 
+### v2.0.0
+
+- Feat: Internationalization (i18n)
+- Feat: add pipeline flow control(now you can watch for multiple folders and process them)
+- Style: UI redesign
+- Change: Logs can show pipeline now
+- Fix: Now destination folder can't be in source folder(this will cause infinite loop)
+
 ### v1.0.1
 
 1. fix: unpack sharp to prevent native module crash

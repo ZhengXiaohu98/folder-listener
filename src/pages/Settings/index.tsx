@@ -3,6 +3,7 @@ import { Plus, Layers } from 'lucide-react';
 import { AppearanceSettings } from './AppearanceSettings';
 import { PipelineCard, type Pipeline } from './PipelineCard';
 import { DEFAULT_COMPRESSION } from './CompressionPanel';
+import { useI18n } from '../../i18n';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -31,6 +32,7 @@ export function Settings() {
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [loading, setLoading] = useState(true);
   const [editorTheme, setEditorTheme] = useState('light');
+  const { t } = useI18n();
 
   // Detect app theme for Monaco Editor
   useEffect(() => {
@@ -86,13 +88,13 @@ export function Settings() {
   }, [savePipelines]);
 
   const handleDelete = useCallback((id: string) => {
-    if (!confirm('Delete this pipeline? This cannot be undone.')) return;
+    if (!confirm(t('settings.deletePipelineConfirm'))) return;
     setPipelines(prev => {
       const next = prev.filter(p => p.id !== id);
       savePipelines(next);
       return next;
     });
-  }, [savePipelines]);
+  }, [savePipelines, t]);
 
   const handleAdd = useCallback(() => {
     setPipelines(prev => {
@@ -106,9 +108,9 @@ export function Settings() {
     <div className="space-y-10 pb-4">
       {/* Header */}
       <header className="pb-2">
-        <h1 className="text-3xl font-bold text-primary tracking-tight transition-colors">Settings</h1>
+        <h1 className="text-3xl font-bold text-primary tracking-tight transition-colors">{t('settings.title')}</h1>
         <p className="text-secondary mt-1.5 font-medium transition-colors">
-          Configure pipelines, compression, and appearance.
+          {t('settings.subtitle')}
         </p>
       </header>
 
@@ -119,7 +121,7 @@ export function Settings() {
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
             <Layers className="w-5 h-5 text-accent" />
-            <h2 className="text-xl font-bold text-primary">Pipelines</h2>
+            <h2 className="text-xl font-bold text-primary">{t('settings.pipelines')}</h2>
             <span className="text-sm font-semibold px-3 py-1 rounded-full bg-accent/10 text-accent border border-accent/20 ml-1">
               {pipelines.length}
             </span>
@@ -129,7 +131,7 @@ export function Settings() {
             className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-accent text-white hover:bg-accent/90 transition-all shadow-sm cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            New Pipeline
+            {t('settings.newPipeline')}
           </button>
         </div>
 
@@ -144,16 +146,16 @@ export function Settings() {
             <div className="w-16 h-16 rounded-full bg-back-100 border border-bc-100 flex items-center justify-center mb-4">
               <Layers className="w-7 h-7 text-tertiary" />
             </div>
-            <h3 className="text-lg font-semibold text-primary mb-1">No pipelines yet</h3>
+            <h3 className="text-lg font-semibold text-primary mb-1">{t('settings.noPipelinesTitle')}</h3>
             <p className="text-secondary text-sm mb-5 max-w-xs">
-              Create a pipeline to define which folder to watch, how to compress files, and where to send them.
+              {t('settings.noPipelinesDesc')}
             </p>
             <button
               onClick={handleAdd}
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold bg-accent text-white hover:bg-accent/90 transition-all shadow-sm cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              Create First Pipeline
+              {t('settings.createFirst')}
             </button>
           </div>
         ) : (
@@ -174,7 +176,7 @@ export function Settings() {
               className="w-full py-3.5 rounded-2xl border border-bc-100 border-dashed text-sm font-medium text-secondary hover:text-accent hover:border-accent/40 hover:bg-accent/5 transition-all cursor-pointer flex items-center justify-center gap-2"
             >
               <Plus className="w-4 h-4" />
-              Add Another Pipeline
+              {t('settings.addAnother')}
             </button>
           </div>
         )}
@@ -185,7 +187,7 @@ export function Settings() {
       {/* ------------------------------------------------------------------ */}
       <section>
         <div className="flex items-center gap-2 mb-5">
-          <h2 className="text-xl font-bold text-primary">Appearance</h2>
+          <h2 className="text-xl font-bold text-primary">{t('settings.appearance')}</h2>
         </div>
         <AppearanceSettings />
       </section>

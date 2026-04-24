@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { cn } from '../../lib/utils';
 import { useI18n, type TranslationKey } from '../../i18n';
 import packageJson from '../../../package.json';
+import { Logo } from './Logo';
 
 export type TabType = 'Dashboard' | 'Settings' | 'Logs';
 
@@ -42,7 +43,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           </button>
           {/* Brand */}
           <div className="flex items-center gap-1 mb-10 px-3">
-            <img src="/logo.png" alt="logo" className="w-10 h-10 shrink-0" />
+            <Logo className="w-10 h-10 shrink-0 text-accent" />
             <h1 className="font-semibold text-primary leading-tight transition-colors text-lg italic font-serif">Folder Listener</h1>
           </div>
 

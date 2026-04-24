@@ -23,6 +23,7 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 
 let win: BrowserWindow | null
 let tray: Tray | null = null
 let isQuitting = false
+export let updateTrayMenu: (() => Promise<void>) | null = null
 
 function getAppIconPath() {
   if (process.platform === 'darwin') {
@@ -36,7 +37,7 @@ function setDockIcon() {
   app.dock?.setIcon(getAppIconPath())
 }
 
-function createTray() {
+function createTray(getConfig: () => Promise<any>, setConfig: (updates: any) => Promise<any>) {
   const iconPath = getAppIconPath()
   let trayIcon = nativeImage.createFromPath(iconPath)
 
@@ -49,25 +50,60 @@ function createTray() {
   tray = new Tray(trayIcon)
   tray.setToolTip('Folder Listener')
 
-  const updateContextMenu = () => {
-    const contextMenu = Menu.buildFromTemplate([
+  updateTrayMenu = async () => {
+    if (!tray) return
+    const config = await getConfig()
+    const pipelines: Pipeline[] = config.pipelines ?? []
+    const statusMap = getWatcherStatus()
+
+    const pipelineItems: Electron.MenuItemConstructorOptions[] = pipelines.map(p => {
+      const isRunning = statusMap[p.id] || false
+      return {
+        label: p.name,
+        type: 'checkbox',
+        checked: isRunning,
+        click: async () => {
+          if (isRunning) {
+            await stopPipelineWatcher(p.id)
+            const updated = pipelines.map(p2 => p2.id === p.id ? { ...p2, enabled: false } : p2)
+            await setConfig({ pipelines: updated })
+          } else {
+            await startPipelineWatcher(p, config)
+            const updated = pipelines.map(p2 => p2.id === p.id ? { ...p2, enabled: true } : p2)
+            await setConfig({ pipelines: updated })
+          }
+          await updateTrayMenu?.()
+        }
+      }
+    })
+
+    const template: Electron.MenuItemConstructorOptions[] = [
       {
         label: '显示 Folder Listener',
         click: () => showWindow(),
       },
-      { type: 'separator' },
-      {
-        label: '退出',
-        click: () => {
-          isQuitting = true
-          app.quit()
-        },
+      { type: 'separator' }
+    ]
+
+    if (pipelineItems.length > 0) {
+      template.push(...pipelineItems)
+      template.push({ type: 'separator' })
+    }
+
+    template.push({
+      label: '退出',
+      click: () => {
+        isQuitting = true
+        app.quit()
       },
-    ])
-    tray?.setContextMenu(contextMenu)
+    })
+
+    const contextMenu = Menu.buildFromTemplate(template)
+    tray.setContextMenu(contextMenu)
+    win?.webContents.send('watcher-status-updated')
   }
 
-  updateContextMenu()
+  updateTrayMenu()
 
   tray.on('click', () => {
     showWindow()
@@ -273,6 +309,7 @@ app.whenReady().then(() => {
     try {
       await fs.writeFile(configPath, JSON.stringify(updated, null, 2))
       await applyWatcherConfig(updated)
+      updateTrayMenu?.()
     } catch (err) {
       console.error('Failed to save config', err)
     }
@@ -315,12 +352,14 @@ app.whenReady().then(() => {
   ipcMain.handle('watcher:start', async () => {
     const config = await getConfig()
     await startWatcher(config)
+    updateTrayMenu?.()
     return getWatcherStatus()
   })
 
   /** Stop ALL pipeline watchers */
   ipcMain.handle('watcher:stop', async () => {
     await stopWatcher()
+    updateTrayMenu?.()
     return getWatcherStatus()
   })
 
@@ -374,7 +413,7 @@ app.whenReady().then(() => {
   })
 
   createWindow()
-  createTray()
+  createTray(getConfig, setConfig)
 })
 
 // ---------------------------------------------------------------------------

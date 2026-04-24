@@ -47,5 +47,10 @@ contextBridge.exposeInMainWorld('watcherAPI', {
     const listener = () => callback();
     ipcRenderer.on('activity-added', listener);
     return () => ipcRenderer.off('activity-added', listener);
+  },
+  onStatusUpdated: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on('watcher-status-updated', listener);
+    return () => ipcRenderer.off('watcher-status-updated', listener);
   }
 })

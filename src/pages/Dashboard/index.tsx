@@ -33,6 +33,11 @@ export function Dashboard({ onTabChange }: { onTabChange: (tab: any) => void }) 
 
   useEffect(() => {
     loadData();
+    if ((window as any).watcherAPI?.onStatusUpdated) {
+      return (window as any).watcherAPI.onStatusUpdated(() => {
+        loadData();
+      });
+    }
   }, [loadData]);
 
   const handleToggle = async (pipeline: Pipeline) => {

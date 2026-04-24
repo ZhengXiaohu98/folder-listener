@@ -47,26 +47,32 @@ export function Settings() {
   }, []);
 
   // Load pipelines from config
-  useEffect(() => {
-    const load = async () => {
-      try {
-        if ((window as any).ipcRenderer) {
-          const config = await (window as any).ipcRenderer.invoke('get-config');
-          // Hydrate any old pipelines missing compression fields
-          const hydrated = (config?.pipelines ?? []).map((p: any) => ({
-            ...DEFAULT_COMPRESSION,
-            ...p,
-          }));
-          setPipelines(hydrated);
-        }
-      } catch (err) {
-        console.error('Failed to load config', err);
-      } finally {
-        setLoading(false);
+  const load = useCallback(async () => {
+    try {
+      if ((window as any).ipcRenderer) {
+        const config = await (window as any).ipcRenderer.invoke('get-config');
+        // Hydrate any old pipelines missing compression fields
+        const hydrated = (config?.pipelines ?? []).map((p: any) => ({
+          ...DEFAULT_COMPRESSION,
+          ...p,
+        }));
+        setPipelines(hydrated);
       }
-    };
-    load();
+    } catch (err) {
+      console.error('Failed to load config', err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    load();
+    if ((window as any).watcherAPI?.onStatusUpdated) {
+      return (window as any).watcherAPI.onStatusUpdated(() => {
+        load();
+      });
+    }
+  }, [load]);
 
   // Persist pipelines whenever they change
   const savePipelines = useCallback(async (updated: Pipeline[]) => {
